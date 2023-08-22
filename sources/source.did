@@ -13,14 +13,31 @@ type DefiniteCanisterSettings = record {
   memory_allocation : nat;
   compute_allocation : nat;
 };
+type QueryFile = record {
+  created : nat64;
+  path : text;
+  size : nat64;
+  headers : vec record { text; text };
+};
+type UploadingArg = record {
+  chunk : vec nat8;
+  path : text;
+  size : nat64;
+  headers : vec record { text; text };
+  index : nat32;
+  chunk_size : nat64;
+};
 type WalletReceiveResult = record { accepted : nat64 };
 service : {
   __get_candid_interface_tmp_hack : () -> (text) query;
   canister_status : () -> (CanisterStatusResponse);
+  delete : (vec text) -> ();
+  files : () -> (vec QueryFile) query;
   permission_get_admins : () -> (vec principal) query;
   permission_is_admin : (principal) -> (bool) query;
   permission_remove_admin : (principal) -> ();
   permission_set_admin : (principal) -> ();
+  upload : (vec UploadingArg) -> ();
   wallet_balance : () -> (nat) query;
   wallet_receive : () -> (WalletReceiveResult);
   whoami : () -> (principal) query;
