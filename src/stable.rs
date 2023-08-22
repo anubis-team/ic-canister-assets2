@@ -2,7 +2,7 @@ use std::cell::{RefCell, RefMut};
 
 use ic_canister_kit::{
     identity::caller,
-    types::{Initial, Permissions, PermissionsState, Stable},
+    types::{Initial, Maintainable, MaintainableState, Permissions, PermissionsState, Stable},
 };
 
 use crate::core::types::{CoreAssets, CoreAssetsState, UploadingAssets, UploadingAssetsState};
@@ -12,6 +12,7 @@ pub const PERMISSION_ADMIN: &str = "admin"; // 所有权限
 #[derive(Debug, Default)]
 pub struct State {
     pub permissions: Permissions,
+    pub maintainable: Maintainable,
     pub assets: CoreAssets,
     pub uploading: UploadingAssets,
 }
@@ -22,13 +23,19 @@ impl Initial for State {
     }
 }
 
-type RestoreState = (PermissionsState, CoreAssetsState, UploadingAssetsState);
-type SaveState = RestoreState;
+type RestoreState = (
+    PermissionsState,
+    MaintainableState,
+    CoreAssetsState,
+    UploadingAssetsState,
+);
+type StoreState = RestoreState;
 
-impl Stable<SaveState, RestoreState> for State {
-    fn store(&mut self) -> SaveState {
+impl Stable<StoreState, RestoreState> for State {
+    fn store(&mut self) -> StoreState {
         (
             self.permissions.store(),
+            self.maintainable.store(),
             self.assets.store(),
             self.uploading.store(),
         )
@@ -36,8 +43,9 @@ impl Stable<SaveState, RestoreState> for State {
 
     fn restore(&mut self, restore: RestoreState) {
         self.permissions.restore(restore.0);
-        self.assets.restore(restore.1);
-        self.uploading.restore(restore.2);
+        self.maintainable.restore(restore.1);
+        self.assets.restore(restore.2);
+        self.uploading.restore(restore.3);
     }
 }
 
@@ -53,7 +61,7 @@ thread_local! {
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
     STATE.with(|state_ref| {
-        let mut state: RefMut<dyn Stable<SaveState, RestoreState>> = state_ref.borrow_mut();
+        let mut state: RefMut<dyn Stable<StoreState, RestoreState>> = state_ref.borrow_mut();
         ic_canister_kit::stable::post_upgrade(&mut state);
     });
 }
@@ -63,7 +71,7 @@ fn post_upgrade() {
 #[ic_cdk::pre_upgrade]
 fn pre_upgrade() {
     STATE.with(|state_ref| {
-        let mut state: RefMut<dyn Stable<SaveState, RestoreState>> = state_ref.borrow_mut();
+        let mut state: RefMut<dyn Stable<StoreState, RestoreState>> = state_ref.borrow_mut();
         ic_canister_kit::stable::pre_upgrade(&mut state);
     });
 }
@@ -107,4 +115,8 @@ pub fn is_admin() -> Result<(), String> {
         }
         return Err(format!("{} is not admin", caller.to_text()));
     })
+}
+
+pub fn must_be_running() {
+    with_state(|s| s.maintainable.must_be_running())
 }

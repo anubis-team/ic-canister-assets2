@@ -13,6 +13,7 @@ type DefiniteCanisterSettings = record {
   memory_allocation : nat;
   compute_allocation : nat;
 };
+type MaintainingReason = record { created : nat64; message : text };
 type QueryFile = record {
   created : nat64;
   hash : text;
@@ -34,6 +35,8 @@ service : {
   canister_status : () -> (CanisterStatusResponse);
   delete : (vec text) -> ();
   files : () -> (vec QueryFile) query;
+  maintainable_is_maintaining : () -> (bool) query;
+  maintainable_set_maintaining : (opt MaintainingReason) -> ();
   permission_get_admins : () -> (vec principal) query;
   permission_is_admin : (principal) -> (bool) query;
   permission_remove_admin : (principal) -> ();

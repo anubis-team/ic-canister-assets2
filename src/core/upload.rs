@@ -1,4 +1,4 @@
-use crate::stable::{is_admin, with_mut_state, State};
+use crate::stable::{is_admin, must_be_running, with_mut_state, State};
 
 use super::types::UploadingArg;
 
@@ -6,6 +6,9 @@ use super::types::UploadingArg;
 #[ic_cdk::update(name = "upload", guard = "is_admin")]
 #[candid::candid_method(update, rename = "upload")]
 fn upload(args: Vec<UploadingArg>) {
+    // ! 维护拦截检查
+    must_be_running();
+
     with_mut_state(|s: &mut State| {
         for arg in args {
             // 1. 先暂存本次内容
