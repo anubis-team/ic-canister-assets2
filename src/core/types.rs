@@ -101,8 +101,8 @@ impl CoreAssets {
             },
         );
         // 4. 插入 hashes
-        if !self.hashes.contains_key(&file.path) {
-            self.hashes.insert(file.path.clone(), vec![]);
+        if !self.hashes.contains_key(&hash) {
+            self.hashes.insert(hash.clone(), vec![]);
         }
         let hash_path = self.hashes.get_mut(&hash).unwrap();
         if !hash_path.contains(&file.path) {
@@ -144,6 +144,7 @@ impl CoreAssets {
                     size: asset.size,
                     headers: file.headers.clone(),
                     created: file.created,
+                    hash: file.hash.clone(),
                 }
             })
             .collect()
@@ -156,6 +157,7 @@ pub struct QueryFile {
     pub size: u64,
     pub headers: Vec<(String, String)>,
     pub created: Timestamp,
+    pub hash: String,
 }
 // =========== 上传过程中的对象 ===========
 
@@ -241,14 +243,14 @@ impl UploadingAssets {
         let chunks = UploadingAssets::chunks(&arg);
         assert!(arg.index < chunks, "wrong index");
         // 6. 检查 data
-        if arg.index < chunks - 1 {
-            // 应该是完整的
+        if arg.index < chunks - 1 || arg.size == arg.chunk_size * chunks as u64 {
+            // 是前面完整的 或者 整好整除
             assert!(
                 arg.chunk.len() as u64 == arg.chunk_size,
                 "wrong chunk length"
             );
         } else {
-            // 应该是剩下的
+            // 是剩下的
             assert!(
                 arg.chunk.len() as u64 == arg.size % arg.chunk_size,
                 "wrong chunk length"
@@ -274,20 +276,16 @@ impl UploadingAssets {
         if !self.files.contains_key(&arg.path) {
             // 原来没有的情况下
             let chunks = UploadingAssets::chunks(&arg);
-            let mut data = Vec::with_capacity(arg.size as usize);
-            data.fill(0);
-            let mut chunked = Vec::with_capacity(arg.size as usize);
-            chunked.fill(false);
             self.files.insert(
                 arg.path.clone(),
                 UploadingFile {
                     path: arg.path.clone(),
                     headers: arg.headers.clone(),
-                    data,
+                    data: vec![0; arg.size as usize],
                     size: arg.size,
                     chunk_size: arg.chunk_size,
                     chunks,
-                    chunked,
+                    chunked: vec![false; chunks as usize],
                 },
             );
         }

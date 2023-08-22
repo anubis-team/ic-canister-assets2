@@ -15,6 +15,7 @@ type DefiniteCanisterSettings = record {
 };
 type QueryFile = record {
   created : nat64;
+  hash : text;
   path : text;
   size : nat64;
   headers : vec record { text; text };
