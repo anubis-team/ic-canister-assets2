@@ -20,7 +20,7 @@ ic-certified-map = "0.4.0"
 # ic-canister-kit = { version = "0.1.7", features = ["all"] }
 ic-canister-kit = { path = "../../../ic-canister-kit" }
 
-# serde = "1.0.159"
+serde = "1.0.159"
 # serde_derive = "1.0.159"
 # serde_cbor = "0.11.2"
 # include-base64 = "0.1.0"

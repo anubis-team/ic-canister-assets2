@@ -5,11 +5,15 @@ use ic_canister_kit::{
     types::{Initial, Permissions, PermissionsState, Stable},
 };
 
+use crate::core::types::{CoreAssets, CoreAssetsState, UploadingAssets, UploadingAssetsState};
+
 pub const PERMISSION_ADMIN: &str = "admin"; // 所有权限
 
 #[derive(Debug, Default)]
 pub struct State {
     pub permissions: Permissions,
+    pub assets: CoreAssets,
+    pub uploading: UploadingAssets,
 }
 
 impl Initial for State {
@@ -18,16 +22,22 @@ impl Initial for State {
     }
 }
 
-type RestoreState = (PermissionsState,);
+type RestoreState = (PermissionsState, CoreAssetsState, UploadingAssetsState);
 type SaveState = RestoreState;
 
 impl Stable<SaveState, RestoreState> for State {
     fn store(&mut self) -> SaveState {
-        (self.permissions.store(),)
+        (
+            self.permissions.store(),
+            self.assets.store(),
+            self.uploading.store(),
+        )
     }
 
     fn restore(&mut self, restore: RestoreState) {
         self.permissions.restore(restore.0);
+        self.assets.restore(restore.1);
+        self.uploading.restore(restore.2);
     }
 }
 

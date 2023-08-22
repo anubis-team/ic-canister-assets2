@@ -1,5 +1,7 @@
 mod types; // 所有的类型
 
+mod core; // 核心模块
+
 mod stable; // 存储模块
 
 mod permissions; // 权限相关模块
