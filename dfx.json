@@ -1,0 +1,19 @@
+{
+    "canisters": {
+        "ic-canister-assets": {
+            "type": "custom",
+            "build": [
+                "cargo build --target wasm32-unknown-unknown --release",
+                "ic-wasm -o sources/source_opt.wasm target/wasm32-unknown-unknown/release/ic_canister_assets.wasm shrink"
+            ],
+            "wasm": "sources/source_opt.wasm",
+            "candid": "sources/source.did"
+        }
+    },
+    "defaults": {
+        "build": {
+            "packtool": ""
+        }
+    },
+    "version": 1
+}
