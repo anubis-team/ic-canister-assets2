@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 /// 上传文件
 
 // 本地文件信息
@@ -111,6 +109,7 @@ fn upload() {
     //     println!("{} -> {}", file.path, file.size);
     // }
     // // 筛选有哪些拓展名
+    // use std::collections::HashSet;
     // let mut ext_set = HashSet::new();
     // for file in local_files.iter() {
     //     let mut s = file.path.split(".");
