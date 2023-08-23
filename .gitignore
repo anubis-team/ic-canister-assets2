@@ -4,3 +4,4 @@ canister_ids.json
 sources/*.wasm
 .DS_Store
 Cargo.lock
+.args.*

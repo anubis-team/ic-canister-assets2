@@ -16,6 +16,7 @@ type DefiniteCanisterSettings = record {
 type MaintainingReason = record { created : nat64; message : text };
 type QueryFile = record {
   created : nat64;
+  modified : nat64;
   hash : text;
   path : text;
   size : nat64;

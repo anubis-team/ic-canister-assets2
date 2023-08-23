@@ -19,6 +19,7 @@ pub struct AssetData {
 pub struct AssetFile {
     pub path: String,
     pub created: Timestamp,
+    pub modified: Timestamp,
     pub headers: Vec<(String, String)>,
     pub hash: String,
 }
@@ -93,15 +94,25 @@ impl CoreAssets {
             );
         }
         // 3. 插入 files: path -> hash
-        self.files.insert(
-            file.path.clone(),
-            AssetFile {
-                path: file.path.clone(),
-                created: now(),
-                headers: file.headers.clone(),
-                hash: hash.clone(),
-            },
-        );
+        let now = now();
+        if self.files.contains_key(&file.path) {
+            let exist = self.files.get_mut(&file.path).unwrap();
+            exist.modified = now;
+            exist.headers = file.headers.clone();
+            exist.hash = hash.clone();
+        } else {
+            self.files.insert(
+                file.path.clone(),
+                AssetFile {
+                    path: file.path.clone(),
+                    created: now,
+                    modified: now,
+                    headers: file.headers.clone(),
+                    hash: hash.clone(),
+                },
+            );
+        }
+
         // 4. 插入 hashes: hash -> [path]
         if !self.hashes.contains_key(&hash) {
             self.hashes.insert(hash.clone(), vec![]);
@@ -146,6 +157,7 @@ impl CoreAssets {
                     size: asset.size,
                     headers: file.headers.clone(),
                     created: file.created,
+                    modified: file.modified,
                     hash: file.hash.clone(),
                 }
             })
@@ -169,6 +181,7 @@ pub struct QueryFile {
     pub size: u64,
     pub headers: Vec<(String, String)>,
     pub created: Timestamp,
+    pub modified: Timestamp,
     pub hash: String,
 }
 
