@@ -1,5 +1,18 @@
 /// 上传文件
 
+// 调用身份
+const IDENTITY: &str = "default";
+// 部署位置
+const NETWORK: &str = "local";
+// const NETWORK: &str = "ic";
+// 本地需要同步的文件夹
+const ASSETS_DIR: &str = "assets";
+// const ASSETS_DIR: &str = "empty";
+// 忽略的文件
+const IGNORE_FILES: [&str; 2] = [".DS_Store", ".gitkeep"];
+// 固定上传长度 接近 1.9M
+const CHUNK_SIZE: u64 = 1024 * 1024 * 2 - 1024 * 128;
+
 // 本地文件信息
 #[derive(Debug, Clone)]
 struct LocalFile {
@@ -86,19 +99,6 @@ const EXT_CONTENT_TYPES: [(&str, &str); 49] = [
     ("cache", ""),
 ];
 
-// 调用身份
-const IDENTITY: &str = "default";
-// 部署位置
-const NETWORK: &str = "local";
-// const NETWORK: &str = "ic";
-// 本地需要同步的文件夹
-const ASSETS_DIR: &str = "assets";
-// const ASSETS_DIR: &str = "empty";
-// 忽略的文件
-const IGNORE_FILES: [&str; 2] = [".DS_Store", ".gitkeep"];
-// 固定上传长度 接近 1.9M
-const CHUNK_SIZE: u64 = 1024 * 1024 * 2 - 1024 * 128;
-
 #[test]
 fn upload() {
     // 1. 读取本地数据
@@ -134,7 +134,7 @@ fn upload() {
         .filter(|p| !local_file_names.contains(p)) // 远程存在, 但本地不存在
         .collect();
     if !deletes.is_empty() {
-    delete_files(deletes);
+        delete_files(deletes);
     }
 
     // 4. 比较本地有但是远程不一样的要进行上传
