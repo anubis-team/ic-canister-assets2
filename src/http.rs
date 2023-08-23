@@ -31,25 +31,40 @@ fn http_request() {
 }
 
 #[inline]
-fn _http_request(req: CustomHttpRequest, _state: &State) {
+fn _http_request(req: CustomHttpRequest, state: &State) {
     // ic_cdk::println!("request =============== ");
 
     let mut split_url = req.url.split('?');
 
-    let url = split_url.next().unwrap_or("/"); // 分割出 url，默认是 /
+    let path = split_url.next().unwrap_or("/"); // 分割出 url，默认是 /
 
-    ic_cdk::println!("url: {:?} -> {}", req.url, url);
-
-    // 根据路径找文件
+    ic_cdk::println!("path: {:?} -> {}", req.url, path);
 
     let mut headers: HashMap<&str, Cow<str>> = HashMap::new();
 
-    let body: Vec<u8> = format!("Total NFTs: {}", 123).into_bytes();
+    let mut body: Vec<u8> = format!("Total NFTs: {}", 123).into_bytes();
     let mut code = 200; // 响应码默认是 200
+
+    // 根据路径找文件
+    let file = state.assets.files.get(path);
+    if let Some(file) = file {
+        // 有对应的文件
+    } else {
+        body = not_found(&mut code, &mut headers);
+    }
 
     ic_cdk::api::call::reply((CustomHttpResponse {
         status_code: code,
         headers,
         body: body.into(),
     },));
+}
+
+// 找不到对应的文件
+fn not_found<'a>(code: &mut u16, headers: &mut HashMap<&'a str, Cow<'a, str>>) -> Vec<u8> {
+    *code = 404;
+
+    headers.insert("Content-Type", "text/plain".into());
+
+    b"Not found"[..].into()
 }

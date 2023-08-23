@@ -27,8 +27,8 @@ pub struct AssetFile {
 // 需要存储的对象
 #[derive(Default, Debug, Clone)]
 pub struct CoreAssets {
-    assets: HashMap<String, AssetData>,   // key 是 hash
-    files: HashMap<String, AssetFile>,    // key 是 path
+    pub assets: HashMap<String, AssetData>, // key 是 hash
+    pub files: HashMap<String, AssetFile>,  // key 是 path
     hashes: HashMap<String, Vec<String>>, // key 是 hash, value 是 path, 没有 path 的数据是没有保存意义的
 }
 
