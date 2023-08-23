@@ -43,21 +43,23 @@ impl Stable<CoreAssetsState, CoreAssetsState> for CoreAssets {
     }
 
     fn restore(&mut self, restore: CoreAssetsState) {
+        // assets: hash -> data
         let assets = restore.0;
         let assets = assets
             .into_iter()
             .map(|asset| (asset.hash.clone(), asset))
             .collect();
+        // files: path -> hash
         let files = restore.1;
         let files: HashMap<String, AssetFile> = files
             .into_iter()
             .map(|file| (file.path.clone(), file))
             .collect();
-        // 统计 hashes
+        // hashes: hash -> [path]
         self.hashes.clear();
         for (path, file) in files.iter() {
-            if !self.hashes.contains_key(&file.path) {
-                self.hashes.insert(file.path.clone(), vec![]);
+            if !self.hashes.contains_key(&file.hash) {
+                self.hashes.insert(file.hash.clone(), vec![]);
             }
             let hash_path = self.hashes.get_mut(&file.hash).unwrap();
             hash_path.push(path.clone());
@@ -78,7 +80,7 @@ impl CoreAssets {
     pub fn put(&mut self, file: &UploadingFile) {
         // 1. 计算 hash
         let hash = CoreAssets::hash(file);
-        // 2. 插入 hash
+        // 2. 插入 assets: hash -> data
         if !self.assets.contains_key(&hash) {
             let data = (&file.data[0..(file.size as usize)]).to_vec();
             self.assets.insert(
@@ -90,7 +92,7 @@ impl CoreAssets {
                 },
             );
         }
-        // 3. 插入 files
+        // 3. 插入 files: path -> hash
         self.files.insert(
             file.path.clone(),
             AssetFile {
@@ -100,7 +102,7 @@ impl CoreAssets {
                 hash: hash.clone(),
             },
         );
-        // 4. 插入 hashes
+        // 4. 插入 hashes: hash -> [path]
         if !self.hashes.contains_key(&hash) {
             self.hashes.insert(hash.clone(), vec![]);
         }
