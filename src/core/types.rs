@@ -128,23 +128,23 @@ impl CoreAssets {
         if let None = file {
             return;
         }
-        let file = file.unwrap().clone();
+        let file: AssetFile = file.unwrap().clone();
         // 2. 清除 file
         self.files.remove(path);
         // 3. 清除 hashes
-        let hash_path = self.hashes.get_mut(&file.hash).unwrap();
-        let hash_path: Vec<String> = hash_path
+        let path_list = self.hashes.get_mut(&file.hash).unwrap();
+        let path_list: Vec<String> = path_list
             .clone()
             .into_iter()
-            .filter(|f| f != &file.hash)
+            .filter(|p| p != &file.path)
             .collect();
-        if hash_path.is_empty() {
+        if path_list.is_empty() {
             // 需要清空
             self.hashes.remove(&file.hash);
             // 4. 清空 assets
             self.assets.remove(&file.hash);
         } else {
-            self.hashes.insert(file.hash.clone(), hash_path); // 插入新的
+            self.hashes.insert(file.hash.clone(), path_list); // 插入新的
         }
     }
     pub fn files(&self) -> Vec<QueryFile> {
@@ -153,7 +153,7 @@ impl CoreAssets {
             .map(|(path, file)| {
                 let asset = self.assets.get(&file.hash).unwrap();
                 QueryFile {
-                    path: path.clone(),
+                    path: path.to_string(),
                     size: asset.size,
                     headers: file.headers.clone(),
                     created: file.created,

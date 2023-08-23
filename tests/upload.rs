@@ -133,7 +133,9 @@ fn upload() {
         .map(|f| f.path.clone())
         .filter(|p| !local_file_names.contains(p)) // 远程存在, 但本地不存在
         .collect();
+    if !deletes.is_empty() {
     delete_files(deletes);
+    }
 
     // 4. 比较本地有但是远程不一样的要进行上传
     let local_files: Vec<LocalFile> = local_files
