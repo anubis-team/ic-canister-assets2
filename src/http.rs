@@ -5,7 +5,7 @@ use percent_encoding::percent_decode_str;
 
 use crate::stable::State;
 
-use super::types::*;
+use crate::types::*;
 
 // 为了自动生成 did，这个方法仅仅为了占位
 #[candid::candid_method(query, rename = "http_request")]
@@ -35,20 +35,37 @@ fn _http_request(req: CustomHttpRequest, state: &State) {
     // ic_cdk::println!("request =============== ");
 
     let mut split_url = req.url.split('?');
+    let request_headers = req.headers;
 
     let path = split_url.next().unwrap_or("/"); // 分割出 url，默认是 /
+    let params = split_url.next().unwrap_or(""); // 请求参数
 
-    ic_cdk::println!("path: {:?} -> {}", req.url, path);
+    ic_cdk::println!("path: {} -> {}", req.url, path);
+    for (key, value) in request_headers.iter() {
+        ic_cdk::println!("header: {}: {}", key, value);
+    }
 
     let mut headers: HashMap<&str, Cow<str>> = HashMap::new();
 
-    let mut body: Vec<u8> = format!("Total NFTs: {}", 123).into_bytes();
+    let body: Vec<u8>;
     let mut code = 200; // 响应码默认是 200
 
     // 根据路径找文件
     let file = state.assets.files.get(path);
     if let Some(file) = file {
-        // 有对应的文件
+        let asset = state.assets.assets.get(&file.hash);
+        if let Some(asset) = asset {
+            body = toast(
+                &request_headers,
+                params,
+                file,
+                asset,
+                &mut code,
+                &mut headers,
+            ) // 有对应的文件
+        } else {
+            body = not_found(&mut code, &mut headers);
+        }
     } else {
         body = not_found(&mut code, &mut headers);
     }
@@ -58,6 +75,134 @@ fn _http_request(req: CustomHttpRequest, state: &State) {
         headers,
         body: body.into(),
     },));
+}
+
+fn toast<'a>(
+    request_headers: &HashMap<String, String>,
+    params: &str,
+    file: &'a AssetFile,
+    asset: &AssetData,
+    code: &mut u16,
+    headers: &mut HashMap<&'a str, Cow<'a, str>>,
+) -> Vec<u8> {
+    // 1. 设置 header
+    let (offset, offset_end) = set_headers(
+        request_headers,
+        params,
+        file,
+        asset.size as usize,
+        code,
+        headers,
+    );
+
+    // 2. 返回指定的内容
+    (&asset.data[offset..offset_end]).to_vec()
+}
+
+fn set_headers<'a>(
+    request_headers: &HashMap<String, String>,
+    params: &str,
+    file: &'a AssetFile,
+    size: usize,
+    code: &mut u16,
+    headers: &mut HashMap<&'a str, Cow<'a, str>>,
+) -> (usize, usize) {
+    // let mut gzip = false;
+    let mut content_type = "";
+    for (key, value) in file.headers.iter() {
+        if &key.to_lowercase() == "content-type" {
+            content_type = value;
+        }
+        // if &key.to_lowercase() == "content-encoding" && value == "gzip" {
+        //     gzip = true;
+        // }
+    }
+
+    // ! 这个时间库无法编译
+    // use chrono::{TimeZone, Utc};
+    // let modified = Utc.timestamp_nanos(file.modified as i64);
+    // headers.insert("Last-Modified", modified.to_rfc2822().into());
+
+    // 额外增加的请求头
+    headers.insert("Accept-Ranges", "bytes".into()); // 支持范围请求
+    headers.insert("ETag", file.hash.to_string().into()); // 缓存标识
+
+    headers.insert("Transfer-Encoding", "chunked".into()); // 貌似没用, 在 stream 方式里面使用吧
+    headers.insert("Connection", "keep-alive".into()); // 保持链接 // 感觉没啥用, 在 stream 方式里面使用吧
+
+    // 访问控制
+    headers.insert("Access-Control-Allow-Origin", "*".into());
+    headers.insert(
+        "Access-Control-Allow-Methods",
+        "HEAD, GET, POST, OPTIONS".into(),
+    );
+    headers.insert("Access-Control-Allow-Headers", "DNT,User-Agent,X-Requested-With,If-None-Match,If-Modified-Since,Cache-Control,Content-Type,Range,Cookie".into());
+    headers.insert(
+        "Access-Control-Expose-Headers",
+        "Accept-Ranges,Content-Length,Content-Range".into(),
+    );
+    headers.insert("Access-Control-Max-Age", "600".into());
+
+    // Range 设置
+    let mut start: usize = 0;
+    let mut end: usize = size;
+    if let Some(range) = {
+        let mut range = None;
+        for (key, value) in request_headers.iter() {
+            if &key.to_lowercase() == "range" {
+                range = Some(value.trim());
+                break;
+            }
+        }
+        range
+    } {
+        // bytes=start-end
+        if range.starts_with("bytes=") {
+            let range = &range[6..];
+            let mut ranges = range.split("-");
+            let s = ranges.next();
+            let e = ranges.next();
+            if let Some(s) = s {
+                let s: usize = s.parse().unwrap_or(0);
+                if s < size {
+                    start = s
+                };
+            }
+            if let Some(e) = e {
+                let e: usize = e.parse().unwrap_or(size - 1);
+                if start < e && e < size {
+                    end = e + 1
+                };
+            }
+        }
+    }
+
+    // 独立的请求头内容
+    for (key, value) in file.headers.iter() {
+        headers.insert(key, value.into());
+    }
+
+    // 如果是视频可能需要返回其他的
+    *code = 200;
+
+    // 如果过长, 需要阶段显示
+    const MAX_LENGTH: usize = 3145728 - 1024 * 16; // 最长的响应体
+    let range = end - start;
+    if MAX_LENGTH < range {
+        end = start + MAX_LENGTH; // 响应的范围太大了, 缩短为最大长度
+        if size < end {
+            end = size;
+        }
+    }
+    // Content-Range: bytes 0-499/10000
+    headers.insert(
+        "Content-Range",
+        format!("bytes {}-{}/{}", start, end - 1, size).into(),
+    );
+    // ! 长度设置了会出错
+    // headers.insert("Content-Length", format!("{}", end - start).into()); // ? 这个应该是本次返回的长度
+
+    (start, end)
 }
 
 // 找不到对应的文件
