@@ -260,8 +260,8 @@ impl UploadingAssets {
         // 3. 检查 size
         assert!(0 < arg.size, "size can not be 0");
         assert!(
-            arg.size <= 1024 * 1024 * 1024 * 10, // 最大文件 10G
-            "size must less than 10GB"
+            arg.size <= 1024 * 1024 * 1024 * 4, // 最大文件 4G
+            "size must less than 4GB"
         );
         // 4. 检查 chunk_size
         assert!(0 < arg.chunk_size, "chunk size can not be 0");
