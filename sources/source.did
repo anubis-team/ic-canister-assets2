@@ -34,6 +34,8 @@ service : {
   __get_candid_interface_tmp_hack : () -> (text) query;
   canister_status : () -> (CanisterStatusResponse);
   delete : (vec text) -> ();
+  download : (text) -> (vec nat8) query;
+  download_by : (text, nat64, nat64) -> (vec nat8) query;
   files : () -> (vec QueryFile) query;
   maintainable_is_maintaining : () -> (bool) query;
   maintainable_set_maintaining : (opt MaintainingReason) -> ();

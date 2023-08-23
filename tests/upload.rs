@@ -135,7 +135,7 @@ fn get_headers(file: &str) -> Vec<(String, String)> {
     headers
 }
 
-const IC: bool = false;
+const IC: bool = false; // 是否部署线上
 
 #[test]
 fn upload() {
@@ -192,6 +192,10 @@ fn upload() {
             r
         })
         .collect();
+    if local_files.is_empty() {
+        println!("nothing to do");
+        return;
+    }
     upload_files(identity, local_files);
 }
 
@@ -202,6 +206,7 @@ fn upload_files(identity: &str, local_files: Vec<LocalFile>) {
 
     // 固定上传长度 接近 1.9M
     let chunk_size = 1024 * 1024 * 2 - 1024 * 128;
+    let mut all_count = 0;
     let mut count = 0;
     let mut upload_file: Vec<UploadFile> = vec![];
     for file in local_files.iter() {
@@ -224,6 +229,7 @@ fn upload_files(identity: &str, local_files: Vec<LocalFile>) {
             }
             // 本次也要加入
             count += current_size;
+            all_count += current_size;
             upload_file.push(UploadFile {
                 file: file.clone(),
                 chunks: splitted,
@@ -237,7 +243,11 @@ fn upload_files(identity: &str, local_files: Vec<LocalFile>) {
     if !upload_file.is_empty() {
         upload_files.push(upload_file);
     }
-
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let start = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
     // 下面如果并发比较好
     use std::thread;
     let mut handles = vec![];
@@ -251,6 +261,16 @@ fn upload_files(identity: &str, local_files: Vec<LocalFile>) {
     for handle in handles {
         handle.join().unwrap();
     }
+    let end = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    println!(
+        "all done: total: {:.2}MB time: {}s average: {:.2}MB/s",
+        all_count as f64 / 1024f64 / 1024f64,
+        (end - start) / 1000,
+        all_count as f64 / 1024f64 / 1024f64 / (((end - start) / 1000) as f64)
+    );
 }
 fn do_upload_file(identity: &str, local_files: &Vec<UploadFile>, index: usize) {
     // 1. 保存参数到文件
@@ -280,7 +300,7 @@ fn do_upload_file(identity: &str, local_files: &Vec<UploadFile>, index: usize) {
             .join(";"),
     );
     arg.push_str("})");
-    let arg_file = format!("{}.args.temp", index);
+    let arg_file = format!(".args.{}.temp", index);
     write_file(&arg_file, &arg);
     // 2. 执行上传脚本
     do_upload_file_to_canister(identity, &arg_file, local_files);

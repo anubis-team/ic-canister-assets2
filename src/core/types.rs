@@ -149,6 +149,16 @@ impl CoreAssets {
             })
             .collect()
     }
+    pub fn download(&self, path: String) -> Vec<u8> {
+        let file = self.files.get(&path).expect("File not found");
+        let asset = self.assets.get(&file.hash).expect("File not found");
+        asset.data.clone()
+    }
+    pub fn download_by(&self, path: String, offset: u64, offset_end: u64) -> Vec<u8> {
+        let file = self.files.get(&path).expect("File not found");
+        let asset = self.assets.get(&file.hash).expect("File not found");
+        (&asset.data[(offset as usize)..(offset_end as usize)]).to_vec()
+    }
 }
 
 #[derive(CandidType, Deserialize, Default, Debug, Clone)]
@@ -159,6 +169,7 @@ pub struct QueryFile {
     pub created: Timestamp,
     pub hash: String,
 }
+
 // =========== 上传过程中的对象 ===========
 
 #[derive(CandidType, Deserialize, Default, Debug, Clone)]
