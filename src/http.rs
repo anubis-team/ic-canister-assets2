@@ -1,10 +1,11 @@
-use regex::Regex;
 use std::{borrow::Cow, collections::HashMap};
 
 use percent_encoding::percent_decode_str;
+use regex::Regex;
+
+use ic_canister_kit::http::MAX_RESPONSE_LENGTH;
 
 use crate::stable::State;
-
 use crate::types::*;
 
 // 为了自动生成 did，这个方法仅仅为了占位
@@ -32,37 +33,40 @@ fn http_request() {
 
 #[inline]
 fn _http_request(req: CustomHttpRequest, state: &State) {
-    // ic_cdk::println!("request =============== ");
-
     let mut split_url = req.url.split('?');
     let request_headers = req.headers;
 
     let path = split_url.next().unwrap_or("/"); // 分割出 url，默认是 /
+    let path = percent_decode_str(path).decode_utf8().unwrap();
     let params = split_url.next().unwrap_or(""); // 请求参数
+    let params = percent_decode_str(params).decode_utf8().unwrap();
 
-    ic_cdk::println!("path: {} -> {}", req.url, path);
-    for (key, value) in request_headers.iter() {
-        ic_cdk::println!("header: {}: {}", key, value);
-    }
+    // ic_cdk::println!("============== path: {} -> {}", req.url, path);
+    // for (key, value) in request_headers.iter() {
+    //     ic_cdk::println!("header: {}: {}", key, value);
+    // }
 
-    let mut headers: HashMap<&str, Cow<str>> = HashMap::new();
-
-    let body: Vec<u8>;
     let mut code = 200; // 响应码默认是 200
+    let mut headers: HashMap<&str, Cow<str>> = HashMap::new();
+    let body: Vec<u8>;
+    let mut streaming_strategy: Option<StreamingStrategy> = None;
 
     // 根据路径找文件
-    let file = state.assets.files.get(path);
+    let file = state.assets.files.get(path.as_ref());
     if let Some(file) = file {
         let asset = state.assets.assets.get(&file.hash);
         if let Some(asset) = asset {
-            body = toast(
+            let (_body, _streaming_strategy): (Vec<u8>, Option<StreamingStrategy>) = toast(
+                &path,
+                &params,
                 &request_headers,
-                params,
                 file,
                 asset,
                 &mut code,
                 &mut headers,
-            ) // 有对应的文件
+            ); // 有对应的文件
+            body = _body;
+            streaming_strategy = _streaming_strategy;
         } else {
             body = not_found(&mut code, &mut headers);
         }
@@ -74,21 +78,24 @@ fn _http_request(req: CustomHttpRequest, state: &State) {
         status_code: code,
         headers,
         body: body.into(),
+        streaming_strategy,
     },));
 }
 
 fn toast<'a>(
-    request_headers: &HashMap<String, String>,
+    path: &str,
     params: &str,
+    request_headers: &HashMap<String, String>,
     file: &'a AssetFile,
     asset: &AssetData,
     code: &mut u16,
     headers: &mut HashMap<&'a str, Cow<'a, str>>,
-) -> Vec<u8> {
+) -> (Vec<u8>, Option<StreamingStrategy>) {
     // 1. 设置 header
-    let (offset, offset_end) = set_headers(
-        request_headers,
+    let (offset, offset_end, streaming_strategy) = set_headers(
+        path,
         params,
+        request_headers,
         file,
         asset.size as usize,
         code,
@@ -96,27 +103,31 @@ fn toast<'a>(
     );
 
     // 2. 返回指定的内容
-    (&asset.data[offset..offset_end]).to_vec()
+    (
+        (&asset.data[offset..offset_end]).to_vec(),
+        streaming_strategy,
+    )
 }
 
 fn set_headers<'a>(
-    request_headers: &HashMap<String, String>,
+    path: &str,
     params: &str,
+    request_headers: &HashMap<String, String>,
     file: &'a AssetFile,
     size: usize,
     code: &mut u16,
     headers: &mut HashMap<&'a str, Cow<'a, str>>,
-) -> (usize, usize) {
+) -> (usize, usize, Option<StreamingStrategy>) {
     // let mut gzip = false;
-    let mut content_type = "";
-    for (key, value) in file.headers.iter() {
-        if &key.to_lowercase() == "content-type" {
-            content_type = value;
-        }
-        // if &key.to_lowercase() == "content-encoding" && value == "gzip" {
-        //     gzip = true;
-        // }
-    }
+    // let mut content_type = "";
+    // for (key, value) in file.headers.iter() {
+    //     if &key.to_lowercase() == "content-type" {
+    //         content_type = value;
+    //     }
+    //     if &key.to_lowercase() == "content-encoding" && value == "gzip" {
+    //         gzip = true;
+    //     }
+    // }
 
     // ! 这个时间库无法编译
     // use chrono::{TimeZone, Utc};
@@ -126,9 +137,6 @@ fn set_headers<'a>(
     // 额外增加的请求头
     headers.insert("Accept-Ranges", "bytes".into()); // 支持范围请求
     headers.insert("ETag", file.hash.to_string().into()); // 缓存标识
-
-    headers.insert("Transfer-Encoding", "chunked".into()); // 貌似没用, 在 stream 方式里面使用吧
-    headers.insert("Connection", "keep-alive".into()); // 保持链接 // 感觉没啥用, 在 stream 方式里面使用吧
 
     // 访问控制
     headers.insert("Access-Control-Allow-Origin", "*".into());
@@ -181,28 +189,45 @@ fn set_headers<'a>(
     for (key, value) in file.headers.iter() {
         headers.insert(key, value.into());
     }
-
-    // 如果是视频可能需要返回其他的
-    *code = 200;
-
+    // ic_cdk::println!("---------- {} {} ----------", start, end);
     // 如果过长, 需要阶段显示
-    const MAX_LENGTH: usize = 3145728 - 1024 * 16; // 最长的响应体
-    let range = end - start;
-    if MAX_LENGTH < range {
-        end = start + MAX_LENGTH; // 响应的范围太大了, 缩短为最大长度
-        if size < end {
-            end = size;
-        }
+    let mut streaming_end = end;
+    let mut streaming_strategy: Option<StreamingStrategy> = None;
+    let range = streaming_end - start;
+    if MAX_RESPONSE_LENGTH < range && start + MAX_RESPONSE_LENGTH < end {
+        // 响应的范围太大了, 缩短为最大长度, 此时应当开启流式响应
+        streaming_end = start + MAX_RESPONSE_LENGTH;
+        streaming_strategy = Some(StreamingStrategy::Callback {
+            callback: HttpRequestStreamingCallback::new(
+                ic_cdk::id(),
+                "http_request_streaming_callback".to_string(),
+            ),
+            token: StreamingCallbackToken {
+                path: path.to_string(),
+                params: params.to_string(),
+                headers: request_headers.clone(),
+                start: streaming_end as u64,
+                end: end as u64,
+            },
+        });
+        headers.insert("Transfer-Encoding", "chunked".into());
+        headers.insert("Connection", "keep-alive".into()); // 保持链接
     }
     // Content-Range: bytes 0-499/10000
     headers.insert(
         "Content-Range",
-        format!("bytes {}-{}/{}", start, end - 1, size).into(),
+        format!("bytes {}-{}/{}", start, end - 1, size).into(), // 流式响应也要设置正确的内容范围
     );
     // ! 长度设置了会出错
     // headers.insert("Content-Length", format!("{}", end - start).into()); // ? 这个应该是本次返回的长度
 
-    (start, end)
+    // 如果是视频可能需要返回其他的
+    *code = 200;
+    if end < size {
+        *code = 206; // 还有内容没给
+    }
+
+    (start, streaming_end, streaming_strategy)
 }
 
 // 找不到对应的文件
@@ -212,4 +237,63 @@ fn not_found<'a>(code: &mut u16, headers: &mut HashMap<&'a str, Cow<'a, str>>) -
     headers.insert("Content-Type", "text/plain".into());
 
     b"Not found"[..].into()
+}
+
+// 流式响应回调
+#[ic_cdk::query]
+fn http_request_streaming_callback(
+    StreamingCallbackToken {
+        path,
+        params,
+        headers,
+        start,
+        end,
+    }: StreamingCallbackToken,
+) -> StreamingCallbackHttpResponse {
+    // ic_cdk::println!(
+    //     "http_request_streaming_callback: {:?} {:?} {:?} {:?} {:?}",
+    //     path,
+    //     params,
+    //     headers,
+    //     start,
+    //     end,
+    // );
+    if start == end {
+        // 首尾相等, 说明没有数据了
+        return StreamingCallbackHttpResponse {
+            body: vec![],
+            token: None,
+        };
+    }
+    crate::stable::with_state(|state| {
+        let file = state.assets.files.get(&path);
+        if let Some(file) = file {
+            let asset = state.assets.assets.get(&file.hash);
+            if let Some(asset) = asset {
+                // 如果过长, 需要阶段显示
+                let start = start as usize;
+                let end = end as usize;
+                let mut streaming_end = end;
+                let range = streaming_end - start;
+                if MAX_RESPONSE_LENGTH < range && start + MAX_RESPONSE_LENGTH < end {
+                    // 响应的范围太大了, 缩短为最大长度, 此时应当继续流式响应
+                    streaming_end = start + MAX_RESPONSE_LENGTH;
+                }
+                return StreamingCallbackHttpResponse {
+                    body: (&asset.data[start..streaming_end]).to_vec(),
+                    token: Some(StreamingCallbackToken {
+                        path: path.to_string(),
+                        params: params.to_string(),
+                        headers: headers.clone(),
+                        start: streaming_end as u64, // 继续
+                        end: end as u64,
+                    }),
+                };
+            }
+        }
+        StreamingCallbackHttpResponse {
+            body: vec![],
+            token: None,
+        }
+    })
 }

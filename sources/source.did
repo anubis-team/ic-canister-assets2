@@ -16,6 +16,7 @@ type CustomHttpRequest = record {
 type CustomHttpResponse = record {
   body : vec nat8;
   headers : vec record { text; text };
+  streaming_strategy : opt StreamingStrategy;
   status_code : nat16;
 };
 type DefiniteCanisterSettings = record {
@@ -32,6 +33,25 @@ type QueryFile = record {
   path : text;
   size : nat64;
   headers : vec record { text; text };
+};
+type StreamingCallbackHttpResponse = record {
+  token : opt StreamingCallbackToken;
+  body : vec nat8;
+};
+type StreamingCallbackToken = record {
+  end : nat64;
+  path : text;
+  headers : vec record { text; text };
+  start : nat64;
+  params : text;
+};
+type StreamingStrategy = variant {
+  Callback : record {
+    token : StreamingCallbackToken;
+    callback : func (StreamingCallbackToken) -> (
+        StreamingCallbackHttpResponse,
+      ) query;
+  };
 };
 type UploadingArg = record {
   chunk : vec nat8;
