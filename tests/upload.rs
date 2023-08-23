@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 /// 上传文件
 
 // 本地文件信息
@@ -107,6 +109,19 @@ fn upload() {
     let local_file_names: Vec<String> = local_files.iter().map(|f| f.path.clone()).collect();
     // for file in local_files.iter() {
     //     println!("{} -> {}", file.path, file.size);
+    // }
+    // // 筛选有哪些拓展名
+    // let mut ext_set = HashSet::new();
+    // for file in local_files.iter() {
+    //     let mut s = file.path.split(".");
+    //     let mut ext = "";
+    //     while let Some(e) = s.next() {
+    //         ext = e;
+    //     }
+    //     ext_set.insert(ext.to_string());
+    // }
+    // for ext in ext_set.iter() {
+    //     println!("ext -> {ext}");
     // }
 
     // 2. 读取线上数据
