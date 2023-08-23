@@ -7,6 +7,17 @@ type CanisterStatusResponse = record {
   module_hash : opt vec nat8;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
+type CustomHttpRequest = record {
+  url : text;
+  method : text;
+  body : vec nat8;
+  headers : vec record { text; text };
+};
+type CustomHttpResponse = record {
+  body : vec nat8;
+  headers : vec record { text; text };
+  status_code : nat16;
+};
 type DefiniteCanisterSettings = record {
   freezing_threshold : nat;
   controllers : vec principal;
@@ -38,6 +49,7 @@ service : {
   download : (text) -> (vec nat8) query;
   download_by : (text, nat64, nat64) -> (vec nat8) query;
   files : () -> (vec QueryFile) query;
+  http_request : (CustomHttpRequest) -> (CustomHttpResponse) query;
   maintainable_is_maintaining : () -> (bool) query;
   maintainable_set_maintaining : (opt MaintainingReason) -> ();
   permission_get_admins : () -> (vec principal) query;
