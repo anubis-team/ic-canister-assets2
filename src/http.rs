@@ -5,6 +5,7 @@ use regex::Regex;
 
 use ic_canister_kit::http::MAX_RESPONSE_LENGTH;
 
+use crate::home::home;
 use crate::stable::State;
 use crate::types::*;
 
@@ -51,27 +52,31 @@ fn _http_request(req: CustomHttpRequest, state: &State) {
     let body: Vec<u8>;
     let mut streaming_strategy: Option<StreamingStrategy> = None;
 
-    // 根据路径找文件
-    let file = state.assets.files.get(path.as_ref());
-    if let Some(file) = file {
-        let asset = state.assets.assets.get(&file.hash);
-        if let Some(asset) = asset {
-            let (_body, _streaming_strategy): (Vec<u8>, Option<StreamingStrategy>) = toast(
-                &path,
-                &params,
-                &request_headers,
-                file,
-                asset,
-                &mut code,
-                &mut headers,
-            ); // 有对应的文件
-            body = _body;
-            streaming_strategy = _streaming_strategy;
+    if path == "/" {
+        body = home(&mut headers, state); // 主页内容
+    } else {
+        // 根据路径找文件
+        let file = state.assets.files.get(path.as_ref());
+        if let Some(file) = file {
+            let asset = state.assets.assets.get(&file.hash);
+            if let Some(asset) = asset {
+                let (_body, _streaming_strategy): (Vec<u8>, Option<StreamingStrategy>) = toast(
+                    &path,
+                    &params,
+                    &request_headers,
+                    file,
+                    asset,
+                    &mut code,
+                    &mut headers,
+                ); // 有对应的文件
+                body = _body;
+                streaming_strategy = _streaming_strategy;
+            } else {
+                body = not_found(&mut code, &mut headers);
+            }
         } else {
             body = not_found(&mut code, &mut headers);
         }
-    } else {
-        body = not_found(&mut code, &mut headers);
     }
 
     ic_cdk::api::call::reply((CustomHttpResponse {
@@ -128,6 +133,27 @@ fn set_headers<'a>(
     //         gzip = true;
     //     }
     // }
+
+    // 文件名下载
+    let reg = Regex::new(r"attachment=(.*\..*)?(&.*)?$").unwrap();
+    for cap in reg.captures_iter(params) {
+        let mut file_name = cap
+            .get(1)
+            .and_then(|m| Some(&params[m.start()..m.end()]))
+            .unwrap_or("");
+        if file_name.is_empty() {
+            let mut s = file.path.split("/");
+            while let Some(name) = s.next() {
+                file_name = name;
+            }
+        }
+        if !file_name.is_empty() {
+            headers.insert(
+                "Content-Disposition",
+                format!("attachment; filename=\"{}\"", file_name).into(),
+            ); // 下载文件名
+        }
+    }
 
     // ! 这个时间库无法编译
     // use chrono::{TimeZone, Utc};
