@@ -144,10 +144,14 @@ fn set_headers<'a>(
         "Access-Control-Allow-Methods",
         "HEAD, GET, POST, OPTIONS".into(),
     );
-    headers.insert("Access-Control-Allow-Headers", "DNT,User-Agent,X-Requested-With,If-None-Match,If-Modified-Since,Cache-Control,Content-Type,Range,Cookie".into());
+    headers.insert(
+        "Access-Control-Allow-Headers",
+        "Origin,Access-Control-Request-Headers,Access-Control-Allow-Headers,DNT,X-Requested-With,X-Mx-ReqToken,Keep-Alive,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Accept,Connection,Cook ie,X-XSRF-TOKEN,X-CSRF-TOKEN,Authorization".into(),
+    );
     headers.insert(
         "Access-Control-Expose-Headers",
-        "Accept-Ranges,Content-Length,Content-Range".into(),
+        "Accept-Ranges,Content-Length,Content-Range,Transfer-Encoding,Connection,Cache-Control,Content-Disposition"
+            .into(),
     );
     headers.insert("Access-Control-Max-Age", "600".into());
 
