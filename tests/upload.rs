@@ -1,8 +1,6 @@
 /// 上传文件
-/// cargo test upload
-use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct LocalFile {
     pub path: String,
     pub size: u64,
@@ -19,14 +17,14 @@ struct RemoteFile {
     pub created: u64,
     pub hash: String,
 }
-
+#[derive(Debug)]
 struct UploadFile {
     pub file: LocalFile,
-    pub chunks: u32,     //  总块数
-    pub chunk_size: u64, // 块大小
-    pub index: u64,      // 序号
-    pub offset: u64,     // 起始偏移
-    pub offset_end: u64, // 末位
+    pub chunks: u64,       //  总块数
+    pub chunk_size: u64,   // 块大小
+    pub index: u64,        // 序号
+    pub offset: usize,     // 起始偏移
+    pub offset_end: usize, // 末位
 }
 
 fn get_content_type_with_gz(name: String, ext: String, gz: bool) -> String {
@@ -48,6 +46,7 @@ fn get_content_type_with_gz(name: String, ext: String, gz: bool) -> String {
         "pdf" => content_type = "application/pdf",
         "zip" => content_type = "application/zip",
         "7z" => content_type = "application/x-7z-compressed",
+        "eot" => content_type = "application/vnd.ms-fontobject",
         // 图片
         "png" => content_type = "image/png",
         "gif" => content_type = "image/gif",
@@ -114,7 +113,7 @@ fn get_headers(file: &str) -> Vec<(String, String)> {
             println!("Invalid extension");
         }
     } else {
-        println!("No extension");
+        println!("No extension: {}", file);
     }
 
     // 内容类型
@@ -136,20 +135,24 @@ fn get_headers(file: &str) -> Vec<(String, String)> {
     headers
 }
 
+const IC: bool = false;
+
 #[test]
 fn upload() {
     // 0. 调用身份
     let identity = "default";
     // 1. 读取本地数据
-    let mut local_files: HashMap<String, LocalFile> = HashMap::new();
-    load_local_files("assets", &mut local_files);
-    let local_file_names: Vec<String> = local_files.iter().map(|(_, f)| f.path.clone()).collect();
-    for (_, file) in local_files.iter() {
-        println!("{} -> {}", file.path, file.size);
-    }
+    let mut local_files: Vec<LocalFile> = vec![];
+    let assets_path = "assets";
+    // let assets_path = "assets2";
+    load_local_files(assets_path, assets_path, &mut local_files);
+    let local_file_names: Vec<String> = local_files.iter().map(|f| f.path.clone()).collect();
+    // for file in local_files.iter() {
+    //     println!("{} -> {}", file.path, file.size);
+    // }
     // 2. 读取线上数据
     let remote_files = load_remote_files(identity);
-    println!("remote files: {:?}", remote_files);
+    // println!("remote files: {:?}", remote_files);
     // 3. 比较远程有但是本地没有的要删除
     let deletes: Vec<String> = remote_files
         .iter()
@@ -160,7 +163,6 @@ fn upload() {
     // 4. 比较本地有但是远程不一样的要进行上传
     let local_files: Vec<LocalFile> = local_files
         .into_iter()
-        .map(|(_, f)| f)
         .filter(|file| {
             let remote_file = remote_files.iter().find(|f| f.path == file.path);
             if remote_file.is_none() {
@@ -180,9 +182,14 @@ fn upload() {
                 .map(|h| format!("{}:{}", h.0, h.1))
                 .collect();
             remote_file_headers.sort();
-            return file.size != remote_file.size
+            let r = file.size != remote_file.size
                 || file_headers.join(";") != remote_file_headers.join(";")
-                || file.hash != remote_file.hash;
+                || file.hash != remote_file.hash
+                || remote_file.created < file.created * 1000000;
+            if !r {
+                println!("file: {} has not changed. do nothing.", file.path)
+            }
+            r
         })
         .collect();
     upload_files(identity, local_files);
@@ -190,8 +197,174 @@ fn upload() {
 
 // =========== 上传文件 ===========
 
-fn upload_files(identity: &str, local_files: Vec<LocalFile>) {}
-fn upload_file(identity: &str, local_files: Vec<UploadFile>, index: usize) {}
+fn upload_files(identity: &str, local_files: Vec<LocalFile>) {
+    let mut upload_files: Vec<Vec<UploadFile>> = vec![];
+
+    // 固定上传长度 接近 1.9M
+    let chunk_size = 1024 * 1024 * 2 - 1024 * 128;
+    let mut count = 0;
+    let mut upload_file: Vec<UploadFile> = vec![];
+    for file in local_files.iter() {
+        let size = file.size;
+        let mut splitted = size / chunk_size;
+        if splitted * chunk_size < size {
+            splitted += 1;
+        }
+        for i in 0..splitted {
+            let (current_size, offset, offset_end) = if i < splitted - 1 {
+                (chunk_size, chunk_size * i, chunk_size * (i + 1))
+            } else {
+                (size - (splitted - 1) * chunk_size, chunk_size * i, size)
+            };
+            if chunk_size < count + current_size {
+                // 已经满了
+                upload_files.push(upload_file);
+                count = 0;
+                upload_file = vec![]
+            }
+            // 本次也要加入
+            count += current_size;
+            upload_file.push(UploadFile {
+                file: file.clone(),
+                chunks: splitted,
+                chunk_size,
+                index: i,
+                offset: offset as usize,
+                offset_end: offset_end as usize,
+            });
+        }
+    }
+    if !upload_file.is_empty() {
+        upload_files.push(upload_file);
+    }
+
+    // 下面如果并发比较好
+    use std::thread;
+    let mut handles = vec![];
+    for (i, upload_file) in upload_files.into_iter().enumerate() {
+        let identity = identity.to_string();
+        let handle = thread::spawn(move || {
+            do_upload_file(&identity, &upload_file, i);
+        });
+        handles.push(handle);
+    }
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+fn do_upload_file(identity: &str, local_files: &Vec<UploadFile>, index: usize) {
+    // 1. 保存参数到文件
+    let mut arg = String::from("");
+    arg.push_str("(vec{");
+    // (vec { record { path="/12345"; headers=vec{record{"Content-Type"; "images/png"};record{"ddddd";"xxxx"}}; size=2:nat64; chunk_size=2:nat64; index=0:nat32; chunk=vec{1:nat8;2:nat8}}})
+    arg.push_str(
+        &local_files
+            .iter()
+            .map(|file| {
+                format!(
+                    "record{{ path=\"{}\"; headers=vec{{{}}}; size={}:nat64; chunk_size={}:nat64; index={}:nat32; chunk=vec{{{}}} }}",
+                    file.file.path,
+                    file.file
+                        .headers
+                        .iter()
+                        .map(|header| { format!("record{{\"{}\";\"{}\"}}", header.0, header.1) })
+                        .collect::<Vec<String>>()
+                        .join(";"),
+                    file.file.size,
+                    file.chunk_size,
+                    file.index,
+                    (&file.file.data[file.offset..file.offset_end]).iter().map(|u|format!("{}:nat8", u)).collect::<Vec<String>>().join(";")
+                )
+            })
+            .collect::<Vec<String>>()
+            .join(";"),
+    );
+    arg.push_str("})");
+    let arg_file = format!("{}.args.temp", index);
+    write_file(&arg_file, &arg);
+    // 2. 执行上传脚本
+    do_upload_file_to_canister(identity, &arg_file, local_files);
+
+    // 3. 用完文件要删除
+    std::fs::remove_file(arg_file).unwrap();
+}
+
+fn write_file(path: &str, content: &str) {
+    use std::io::Write;
+    if let Ok(_) = std::fs::File::open(path) {
+        std::fs::remove_file(path).unwrap();
+    }
+    std::fs::File::create(&path)
+        .expect("create failed")
+        .write_all(content.as_bytes())
+        .expect("write candid failed");
+}
+
+fn do_upload_file_to_canister(identity: &str, arg: &str, local_files: &Vec<UploadFile>) {
+    use std::process::Command;
+
+    let _start = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards");
+
+    let output = Command::new("/usr/local/bin/dfx")
+        .current_dir(".")
+        .arg("--identity")
+        .arg(identity)
+        .arg("canister")
+        .arg("--network")
+        .arg(if IC { "ic" } else { "local" })
+        .arg("call")
+        .arg("--argument-file")
+        .arg(arg)
+        .arg("ic-canister-assets")
+        .arg("upload")
+        .arg("--output")
+        .arg("idl")
+        .output()
+        .expect("error");
+
+    let _end = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards");
+
+    // println!("api: {} -> {:?}", "files", _end - _start);
+    // println!("status: {}", output.status);
+
+    if format!("{}", output.status).eq("exit status: 0") {
+        // let output = String::from_utf8(output.stdout.clone()).unwrap();
+        // println!("output: {}", output);
+        // 上传成功, 需要展示结果
+        for file in local_files.iter() {
+            println!(
+                "upload file: {} {}/{} hash: {}",
+                file.file.path,
+                file.index + 1,
+                file.chunks,
+                file.file.hash
+            )
+        }
+        return;
+    }
+
+    eprintln!(">>>>>>>>>> ERROR <<<<<<<<<<<");
+    eprintln!("identity: {}", identity);
+    eprintln!("api: {}", "upload");
+    eprintln!("arg: {}", arg);
+    eprintln!("status: {}", output.status);
+    if format!("{}", output.status).eq("exit status: 0") {
+        eprintln!(
+            "output: {}",
+            String::from_utf8(output.stdout).unwrap().trim_end()
+        );
+    } else {
+        eprintln!(
+            "error : {}",
+            String::from_utf8(output.stderr).unwrap().trim_end()
+        );
+    }
+    panic!("error");
+}
 
 // =========== 删除文件 ===========
 
@@ -205,23 +378,19 @@ fn delete_files(identity: &str, names: Vec<String>) {
     let args = format!(
         "(vec {{{}}})",
         names
-            .into_iter()
+            .iter()
             .map(|name| format!("\"{}\"", name))
             .collect::<Vec<String>>()
             .join(";")
     );
 
-    // let output = Command::new("pwd")
-    //     .current_dir(".")
-    //     .output()
-    //     .expect("error");
     let output = Command::new("/usr/local/bin/dfx")
         .current_dir(".")
         .arg("--identity")
         .arg(identity)
         .arg("canister")
         .arg("--network")
-        .arg("ic")
+        .arg(if IC { "ic" } else { "local" })
         .arg("call")
         .arg("ic-canister-assets")
         .arg("delete")
@@ -239,18 +408,13 @@ fn delete_files(identity: &str, names: Vec<String>) {
     // println!("status: {}", output.status);
 
     if format!("{}", output.status).eq("exit status: 0") {
-        let output = String::from_utf8(output.stdout.clone()).unwrap();
+        // let output = String::from_utf8(output.stdout.clone()).unwrap();
         // println!("output: {}", output);
+        for name in names.iter() {
+            println!("delete file: {}", name)
+        }
         return;
     }
-
-    // if format!("{}", output.status) != String::from("0") && result.is_err() {
-    //     let output = String::from_utf8(output.stderr.clone()).unwrap();
-    //     let words = result.err().unwrap();
-    //     if trim(&output).contains(&trim(words)) {
-    //         return String::new();
-    //     }
-    // }
 
     eprintln!(">>>>>>>>>> ERROR <<<<<<<<<<<");
     eprintln!("identity: {}", identity);
@@ -280,17 +444,13 @@ fn load_remote_files(identity: &str) -> Vec<RemoteFile> {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("Time went backwards");
 
-    // let output = Command::new("pwd")
-    //     .current_dir(".")
-    //     .output()
-    //     .expect("error");
     let output = Command::new("/usr/local/bin/dfx")
         .current_dir(".")
         .arg("--identity")
         .arg(identity)
         .arg("canister")
         .arg("--network")
-        .arg("ic")
+        .arg(if IC { "ic" } else { "local" })
         .arg("call")
         .arg("ic-canister-assets")
         .arg("files")
@@ -312,14 +472,6 @@ fn load_remote_files(identity: &str) -> Vec<RemoteFile> {
         // println!("output: {}", output);
         return parse_remote_files(output);
     }
-
-    // if format!("{}", output.status) != String::from("0") && result.is_err() {
-    //     let output = String::from_utf8(output.stderr.clone()).unwrap();
-    //     let words = result.err().unwrap();
-    //     if trim(&output).contains(&trim(words)) {
-    //         return String::new();
-    //     }
-    // }
 
     eprintln!(">>>>>>>>>> ERROR <<<<<<<<<<<");
     eprintln!("identity: {}", identity);
@@ -431,7 +583,7 @@ fn parse_remote_files(output: String) -> Vec<RemoteFile> {
 
 // =========== 读取本地文件 ===========
 
-fn load_local_files(dir_path: &str, files: &mut HashMap<String, LocalFile>) {
+fn load_local_files(prefix: &str, dir_path: &str, files: &mut Vec<LocalFile>) {
     let entries = std::fs::read_dir(dir_path).unwrap();
 
     for entry in entries {
@@ -441,11 +593,14 @@ fn load_local_files(dir_path: &str, files: &mut HashMap<String, LocalFile>) {
 
         if file_type.is_file() {
             let path = format!("{}/{}", dir_path, file_name.to_str().unwrap().to_string());
-            let file = load_local_file(&path);
-            files.insert(path, file);
+            if !path.ends_with(".DS_Store") {
+                let mut file = load_local_file(&path);
+                file.path = (&file.path[prefix.len()..]).to_string();
+                files.push(file);
+            }
         } else if file_type.is_dir() {
             let path = format!("{}/{}", dir_path, file_name.to_str().unwrap().to_string());
-            load_local_files(&path, files);
+            load_local_files(prefix, &path, files);
         }
     }
 }
