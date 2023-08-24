@@ -3,8 +3,8 @@
 // 调用身份
 const IDENTITY: &str = "default";
 // 部署位置
-const NETWORK: &str = "local";
-// const NETWORK: &str = "ic";
+// const NETWORK: &str = "local";
+const NETWORK: &str = "ic";
 // 本地需要同步的文件夹
 const ASSETS_DIR: &str = "assets";
 // const ASSETS_DIR: &str = "empty";

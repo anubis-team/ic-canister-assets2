@@ -8,7 +8,7 @@ mod permissions; // 权限相关模块
 
 mod maintainable; // 维护相关模块
 
-mod home; // 网络模块 主页
+mod explore; // 网络模块 浏览页面, 也就是主页
 
 mod http; // 网络模块
 

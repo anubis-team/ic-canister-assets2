@@ -17,8 +17,8 @@ candid = "0.9.3"           # 不能升级, 因为 ic-cdk 依赖的是 0.8 版本
 ic-cdk = "0.10.0"
 ic-certified-map = "0.4.0"
 
-# ic-canister-kit = { version = "0.1.7", features = ["all"] }
-ic-canister-kit = { path = "../../../ic-canister-kit" }
+ic-canister-kit = { version = "0.2.0" }
+# ic-canister-kit = { path = "../../../ic-canister-kit" }
 
 serde = "1.0.159"
 sha2 = "0.10.6"            # hash

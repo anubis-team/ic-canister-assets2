@@ -5,7 +5,7 @@ use regex::Regex;
 
 use ic_canister_kit::http::MAX_RESPONSE_LENGTH;
 
-use crate::home::home;
+use crate::explore::explore;
 use crate::stable::State;
 use crate::types::*;
 
@@ -53,7 +53,7 @@ fn _http_request(req: CustomHttpRequest, state: &State) {
     let mut streaming_strategy: Option<StreamingStrategy> = None;
 
     if path == "/" {
-        body = home(&mut headers, state); // 主页内容
+        body = explore(&mut headers, state); // 主页内容
     } else {
         // 根据路径找文件
         let file = state.assets.files.get(path.as_ref());
@@ -179,7 +179,7 @@ fn set_headers<'a>(
         "Accept-Ranges,Content-Length,Content-Range,Transfer-Encoding,Connection,Cache-Control,Content-Disposition"
             .into(),
     );
-    headers.insert("Access-Control-Max-Age", "600".into());
+    headers.insert("Access-Control-Max-Age", "86400".into());
 
     // Range 设置
     let mut start: usize = 0;
