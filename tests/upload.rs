@@ -9,8 +9,8 @@ const NETWORK: &str = "ic";
 const ASSETS_DIR: &str = "assets";
 // const ASSETS_DIR: &str = "empty"; // 删除所有数据
 // const ASSETS_DIR: &str = "assets-test"; // 测试数据
-// 忽略的文件
-const IGNORE_FILES: [&str; 2] = [".DS_Store", ".gitkeep"];
+// 忽略的文件或目录, 后缀匹配
+const IGNORE_FILES: [&str; 3] = [".DS_Store", ".gitkeep", ".git"];
 // 固定上传长度 接近 1.9M
 const CHUNK_SIZE: u64 = 1024 * 1024 * 2 - 1024 * 128;
 
@@ -187,7 +187,6 @@ fn load_local_files(prefix: &str, dir_path: &str, files: &mut Vec<LocalFile>) {
         let file_name = entry.file_name();
         let file_type = entry.file_type().unwrap();
 
-        if file_type.is_file() {
             let path = format!("{}/{}", dir_path, file_name.to_str().unwrap().to_string());
             fn is_ignore(path: &str) -> bool {
                 for ignore in IGNORE_FILES {
@@ -197,15 +196,17 @@ fn load_local_files(prefix: &str, dir_path: &str, files: &mut Vec<LocalFile>) {
                 }
                 false
             }
-            let ignore: bool = is_ignore(&path); // 是否是被忽略的文件
-            if !ignore {
+
+        if is_ignore(&path) {
+            continue; // 是否是被忽略的文件或目录
+        }
+
+        if file_type.is_file() {
                 let mut file = load_local_file(&path);
                 file.path = (&file.path[prefix.len()..]).to_string();
                 files.push(file);
-            }
         } else if file_type.is_dir() {
             // 目录还需要进行递归
-            let path = format!("{}/{}", dir_path, file_name.to_str().unwrap().to_string());
             load_local_files(prefix, &path, files);
         }
     }
