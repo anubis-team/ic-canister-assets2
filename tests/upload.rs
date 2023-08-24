@@ -7,7 +7,8 @@ const IDENTITY: &str = "default";
 const NETWORK: &str = "ic";
 // 本地需要同步的文件夹
 const ASSETS_DIR: &str = "assets";
-// const ASSETS_DIR: &str = "empty";
+// const ASSETS_DIR: &str = "empty"; // 删除所有数据
+// const ASSETS_DIR: &str = "assets-test"; // 测试数据
 // 忽略的文件
 const IGNORE_FILES: [&str; 2] = [".DS_Store", ".gitkeep"];
 // 固定上传长度 接近 1.9M

@@ -5,3 +5,4 @@ sources/*.wasm
 .DS_Store
 Cargo.lock
 .args.*
+assets-test/
