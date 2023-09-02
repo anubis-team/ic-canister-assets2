@@ -10,7 +10,7 @@ const ASSETS_DIR: &str = "assets";
 // const ASSETS_DIR: &str = "empty"; // 删除所有数据
 // const ASSETS_DIR: &str = "assets-test"; // 测试数据
 // 忽略的文件或目录, 后缀匹配
-const IGNORE_FILES: [&str; 3] = [".DS_Store", ".gitkeep", ".git"];
+const IGNORE_FILES: [&str; 4] = [".DS_Store", ".gitkeep", ".gitignore", ".git"];
 // 固定上传长度 接近 1.9M
 const CHUNK_SIZE: u64 = 1024 * 1024 * 2 - 1024 * 128;
 
@@ -625,7 +625,7 @@ fn do_upload_file(local_files: &Vec<UploadFile>, index: usize) {
     // 2. 执行上传脚本
     let r = do_upload_file_to_canister(&arg_file, local_files);
     if let Err(msg) = r {
-        println!("{}", msg);
+        println!("{}. try again", msg);
         // 失败了, 就再试一次
         do_upload_file_to_canister(&arg_file, local_files).unwrap();
     }
@@ -680,10 +680,11 @@ fn do_upload_file_to_canister(arg: &str, local_files: &Vec<UploadFile>) -> Resul
         // 上传成功, 需要展示结果
         for file in local_files.iter() {
             println!(
-                "upload file: {} {}/{} hash: {}",
+                "upload file: {} {}/{} ({} bytes) hash: {}",
                 file.file.path,
                 file.index + 1,
                 file.chunks,
+                file.offset_end - file.offset,
                 file.file.hash
             )
         }
