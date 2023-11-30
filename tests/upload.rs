@@ -39,7 +39,7 @@ struct RemoteFile {
 // 上传参数
 #[derive(Debug)]
 struct UploadFile {
-    pub file: LocalFile,
+    pub file: std::sync::Arc<LocalFile>,
     pub chunks: u64,       //  总块数
     pub chunk_size: u64,   // 块大小
     pub index: u64,        // 序号
@@ -522,6 +522,10 @@ fn delete_files(names: Vec<String>) {
 // =========== 上传文件 ===========
 
 fn upload_files(local_files: Vec<LocalFile>) {
+    let local_files = local_files
+        .into_iter()
+        .map(|f| std::sync::Arc::new(f))
+        .collect::<Vec<_>>();
     let mut upload_files: Vec<Vec<UploadFile>> = vec![];
 
     let mut all_count = 0;
