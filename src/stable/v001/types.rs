@@ -70,8 +70,8 @@ pub struct InnerBusiness {
 pub struct HashDigest([u8; 32]);
 
 impl HashDigest {
-    pub fn to_hex(&self) -> String {
-        hex::encode(&self.0)
+    pub fn hex(&self) -> String {
+        hex::encode(self.0)
     }
 }
 
@@ -113,24 +113,20 @@ impl CoreAssets {
         // 1. 计算 hash
         let hash = CoreAssets::hash(file);
         // 2. 插入 assets: hash -> data
-        if !self.assets.contains_key(&hash) {
-            let data = (&file.data[0..(file.size as usize)]).to_vec();
-            self.assets.insert(
-                hash.clone(),
-                AssetData {
-                    hash,
-                    size: file.size,
-                    data,
-                },
-            );
-        }
+        self.assets.entry(hash).or_insert_with(|| {
+            let data = (file.data[0..(file.size as usize)]).to_vec();
+            AssetData {
+                hash,
+                size: file.size,
+                data,
+            }
+        });
         // 3. 插入 files: path -> hash
         let now = ic_canister_kit::times::now();
-        if self.files.contains_key(&file.path) {
-            let exist = self.files.get_mut(&file.path).unwrap();
+        if let Some(exist) = self.files.get_mut(&file.path) {
             exist.modified = now;
             exist.headers = file.headers.clone();
-            exist.hash = hash.clone();
+            exist.hash = hash;
         } else {
             self.files.insert(
                 file.path.clone(),
@@ -139,49 +135,49 @@ impl CoreAssets {
                     created: now,
                     modified: now,
                     headers: file.headers.clone(),
-                    hash: hash.clone(),
+                    hash,
                 },
             );
         }
 
         // 4. 插入 hashes: hash -> [path]
-        if !self.hashes.contains_key(&hash) {
-            self.hashes.insert(hash.clone(), vec![]);
-        }
-        let hash_path = self.hashes.get_mut(&hash).unwrap();
-        if !hash_path.contains(&file.path) {
-            hash_path.push(file.path.clone());
+        self.hashes.entry(hash).or_default();
+        if let Some(hash_path) = self.hashes.get_mut(&hash) {
+            if !hash_path.contains(&file.path) {
+                hash_path.push(file.path.clone());
+            }
         }
     }
     pub fn clean(&mut self, path: &String) {
         // 1. 找到文件
-        let file = self.files.get(path);
-        if let None = file {
-            return;
-        }
-        let file: AssetFile = file.unwrap().clone();
+        let file = match self.files.get(path) {
+            Some(file) => file.clone(),
+            None => return,
+        };
         // 2. 清除 file
         self.files.remove(path);
         // 3. 清除 hashes
-        let path_list = self.hashes.get_mut(&file.hash).unwrap();
-        let path_list: Vec<String> = path_list
-            .clone()
-            .into_iter()
-            .filter(|p| p != &file.path)
-            .collect();
-        if path_list.is_empty() {
-            // 需要清空
-            self.hashes.remove(&file.hash);
-            // 4. 清空 assets
-            self.assets.remove(&file.hash);
-        } else {
-            self.hashes.insert(file.hash.clone(), path_list); // 插入新的
+        if let Some(path_list) = self.hashes.get_mut(&file.hash) {
+            let path_list: Vec<String> = path_list
+                .clone()
+                .into_iter()
+                .filter(|p| p != &file.path)
+                .collect();
+            if path_list.is_empty() {
+                // 需要清空
+                self.hashes.remove(&file.hash);
+                // 4. 清空 assets
+                self.assets.remove(&file.hash);
+            } else {
+                self.hashes.insert(file.hash, path_list); // 插入新的
+            }
         }
     }
     pub fn files(&self) -> Vec<QueryFile> {
         self.files
             .iter()
             .map(|(path, file)| {
+                #[allow(clippy::unwrap_used)] // ? SAFETY
                 let asset = self.assets.get(&file.hash).unwrap();
                 QueryFile {
                     path: path.to_string(),
@@ -189,20 +185,24 @@ impl CoreAssets {
                     headers: file.headers.clone(),
                     created: file.created,
                     modified: file.modified,
-                    hash: hex::encode(file.hash.0),
+                    hash: file.hash.hex(),
                 }
             })
             .collect()
     }
     pub fn download(&self, path: String) -> Vec<u8> {
+        #[allow(clippy::expect_used)] // ? SAFETY
         let file = self.files.get(&path).expect("File not found");
+        #[allow(clippy::expect_used)] // ? SAFETY
         let asset = self.assets.get(&file.hash).expect("File not found");
         asset.data.clone()
     }
     pub fn download_by(&self, path: String, offset: u64, offset_end: u64) -> Vec<u8> {
+        #[allow(clippy::expect_used)] // ? SAFETY
         let file = self.files.get(&path).expect("File not found");
+        #[allow(clippy::expect_used)] // ? SAFETY
         let asset = self.assets.get(&file.hash).expect("File not found");
-        (&asset.data[(offset as usize)..(offset_end as usize)]).to_vec()
+        (asset.data[(offset as usize)..(offset_end as usize)]).to_vec()
     }
 }
 
@@ -256,7 +256,7 @@ impl UploadingAssets {
         chunks as u32
     }
     fn offset(arg: &UploadingArg) -> (usize, usize) {
-        let chunks = UploadingAssets::chunks(&arg);
+        let chunks = UploadingAssets::chunks(arg);
         let offset = arg.chunk_size * arg.index as u64;
         let mut offset_end = offset + arg.chunk_size;
         if arg.index == chunks - 1 {
@@ -267,7 +267,7 @@ impl UploadingAssets {
     fn check_arg(arg: &UploadingArg) {
         // 1. 检查 路径名
         assert!(!arg.path.is_empty(), "must has path");
-        assert!(arg.path.starts_with("/"), "path must start with /");
+        assert!(arg.path.starts_with('/'), "path must start with /");
         // 2. 检查 headers
         // 3. 检查 size
         assert!(0 < arg.size, "size can not be 0");
@@ -278,7 +278,7 @@ impl UploadingAssets {
         // 4. 检查 chunk_size
         assert!(0 < arg.chunk_size, "chunk size can not be 0");
         // 5. 检查 index
-        let chunks = UploadingAssets::chunks(&arg);
+        let chunks = UploadingAssets::chunks(arg);
         assert!(arg.index < chunks, "wrong index");
         // 6. 检查 data
         if arg.index < chunks - 1 || arg.size == arg.chunk_size * chunks as u64 {
@@ -296,11 +296,10 @@ impl UploadingAssets {
         }
     }
     fn check_file(&mut self, arg: &UploadingArg) {
-        if self.files.contains_key(&arg.path) {
+        if let Some(file) = self.files.get(&arg.path) {
             // 已经有这个文件了, 需要比较一下, 参数是否一致
-            let file = self.files.get(&arg.path).unwrap();
             assert!(arg.path == file.path, "wrong path, system error.");
-            let chunks = UploadingAssets::chunks(&arg);
+            let chunks = UploadingAssets::chunks(arg);
             if arg.size != file.size // 文件长度不一致
                 || file.data.len() < file.size as usize // 暂存长度不对
                 || arg.chunk_size != file.chunk_size
@@ -310,10 +309,9 @@ impl UploadingAssets {
                 // 非致命错误, 清空原来的文件就好
                 self.files.remove(&arg.path);
             }
-        }
-        if !self.files.contains_key(&arg.path) {
+        } else {
             // 原来没有的情况下
-            let chunks = UploadingAssets::chunks(&arg);
+            let chunks = UploadingAssets::chunks(arg);
             self.files.insert(
                 arg.path.clone(),
                 UploadingFile {
@@ -336,21 +334,22 @@ impl UploadingAssets {
         self.check_file(&arg);
 
         // 2. 找的对应的缓存文件
-        let file = self.files.get_mut(&arg.path).unwrap();
+        if let Some(file) = self.files.get_mut(&arg.path) {
+            // 3. 复制有效的信息
+            let (offset, offset_end) = UploadingAssets::offset(&arg);
+            file.headers = arg.headers;
+            file.data.splice(offset..offset_end, arg.chunk); // 复制内容
+            file.chunked[arg.index as usize] = true;
 
-        // 3. 复制有效的信息
-        let (offset, offset_end) = UploadingAssets::offset(&arg);
-        file.headers = arg.headers;
-        file.data.splice(offset..offset_end, arg.chunk); // 复制内容
-        file.chunked[arg.index as usize] = true;
-
-        // 4. 是否已经完整
-        for uploaded in file.chunked.iter() {
-            if !uploaded {
-                return None; // 还有没上传的
+            // 4. 是否已经完整
+            for uploaded in file.chunked.iter() {
+                if !uploaded {
+                    return None; // 还有没上传的
+                }
             }
+            return Some(file); // 已经完成的
         }
-        Some(file) // 已经完成的
+        None
     }
     pub fn clean(&mut self, path: &String) {
         self.files.remove(path);

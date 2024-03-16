@@ -20,7 +20,7 @@ impl Business for InnerState {
 
             if let Some(file) = done {
                 // 2. 如果完成了, 需要升级本文件
-                self.business.assets.put(&file);
+                self.business.assets.put(file);
 
                 // 3. 删除这个文件
                 let path = file.path.clone();

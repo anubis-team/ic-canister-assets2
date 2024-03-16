@@ -10,7 +10,7 @@ pub fn explore<'a>(headers: &mut HashMap<&'a str, Cow<'a, str>>, state: &State) 
 
     let files = state.business_files();
     let mut json = String::from("");
-    json.push_str("[");
+    json.push('[');
     json.push_str(
         &files
             .iter()
@@ -32,7 +32,7 @@ pub fn explore<'a>(headers: &mut HashMap<&'a str, Cow<'a, str>>, state: &State) 
             .collect::<Vec<String>>()
             .join(","),
     );
-    json.push_str("]");
+    json.push(']');
 
     HTML.replace("/* CSS */", CSS)
         .replace("const _files = [];", &format!("const _files = {};", json))[..]

@@ -28,9 +28,13 @@ fn inner_http_request(state: &State, req: CustomHttpRequest) -> CustomHttpRespon
     let request_headers = req.headers;
 
     let path = split_url.next().unwrap_or("/"); // 分割出 url，默认是 /
-    let path = percent_decode_str(path).decode_utf8().unwrap();
+    let path = percent_decode_str(path)
+        .decode_utf8()
+        .unwrap_or(Cow::Borrowed(path));
     let params = split_url.next().unwrap_or(""); // 请求参数
-    let params = percent_decode_str(params).decode_utf8().unwrap();
+    let params = percent_decode_str(params)
+        .decode_utf8()
+        .unwrap_or(Cow::Borrowed(params));
 
     // ic_cdk::println!("============== path: {} -> {}", req.url, path);
     // for (key, value) in request_headers.iter() {
@@ -103,7 +107,7 @@ fn toast<'a>(
 
     // 2. 返回指定的内容
     (
-        (&asset.data[offset..offset_end]).to_vec(),
+        (asset.data[offset..offset_end]).to_vec(),
         streaming_strategy,
     )
 }
@@ -129,23 +133,24 @@ fn set_headers<'a>(
     // }
 
     // 文件名下载
-    let reg = Regex::new(r"attachment=(.*\..*)?(&.*)?$").unwrap();
-    for cap in reg.captures_iter(params) {
-        let mut file_name = cap
-            .get(1)
-            .and_then(|m| Some(&params[m.start()..m.end()]))
-            .unwrap_or("");
-        if file_name.is_empty() {
-            let mut s = file.path.split("/");
-            while let Some(name) = s.next() {
-                file_name = name;
+    if let Ok(reg) = Regex::new(r"attachment=(.*\..*)?(&.*)?$") {
+        for cap in reg.captures_iter(params) {
+            let mut file_name = cap
+                .get(1)
+                .map(|m| &params[m.start()..m.end()])
+                .unwrap_or("");
+            if file_name.is_empty() {
+                let s = file.path.split('/');
+                for name in s {
+                    file_name = name;
+                }
             }
-        }
-        if !file_name.is_empty() {
-            headers.insert(
-                "Content-Disposition",
-                format!("attachment; filename=\"{}\"", file_name).into(),
-            ); // 下载文件名
+            if !file_name.is_empty() {
+                headers.insert(
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{}\"", file_name).into(),
+                ); // 下载文件名
+            }
         }
     }
 
@@ -156,7 +161,7 @@ fn set_headers<'a>(
 
     // 额外增加的请求头
     headers.insert("Accept-Ranges", "bytes".into()); // 支持范围请求
-    headers.insert("ETag", file.hash.to_hex().into()); // 缓存标识
+    headers.insert("ETag", file.hash.hex().into()); // 缓存标识
 
     // 访问控制
     headers.insert("Access-Control-Allow-Origin", "*".into());
@@ -189,9 +194,8 @@ fn set_headers<'a>(
         range
     } {
         // bytes=start-end
-        if range.starts_with("bytes=") {
-            let range = &range[6..];
-            let mut ranges = range.split("-");
+        if let Some(range) = range.strip_prefix("bytes=") {
+            let mut ranges = range.split('-');
             let s = ranges.next();
             let e = ranges.next();
             if let Some(s) = s {
@@ -304,7 +308,7 @@ fn http_streaming(
                     streaming_end = start + MAX_RESPONSE_LENGTH;
                 }
                 return StreamingCallbackHttpResponse {
-                    body: (&asset.data[start..streaming_end]).to_vec(),
+                    body: (asset.data[start..streaming_end]).to_vec(),
                     token: Some(StreamingCallbackToken {
                         path: path.to_string(),
                         params: params.to_string(),
