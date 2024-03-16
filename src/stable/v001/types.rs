@@ -24,7 +24,7 @@ pub use super::schedule::schedule_task;
 #[derive(Debug, Clone, Copy, EnumIter, EnumString, strum_macros::Display)]
 pub enum RecordTopics {
     // ! 新的权限类型从 0 开始
-    Upload = 0, // 上传文件
+    UploadFile = 0, // 上传文件
 
     // ! 系统倒序排列
     CyclesCharge = 249, // 充值

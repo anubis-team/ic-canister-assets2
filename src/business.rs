@@ -44,7 +44,7 @@ fn business_upload(args: Vec<UploadingArg>) {
             (None, ())
         },
         caller,
-        RecordTopics::Upload.topic(),
+        RecordTopics::UploadFile.topic(),
         arg_content,
     )
 }
@@ -62,7 +62,7 @@ fn business_delete(names: Vec<String>) {
             (None, ())
         },
         caller,
-        RecordTopics::Upload.topic(),
+        RecordTopics::UploadFile.topic(),
         arg_content,
     )
 }
