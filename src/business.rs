@@ -62,7 +62,7 @@ fn business_delete(names: Vec<String>) {
             (None, ())
         },
         caller,
-        RecordTopics::UploadFile.topic(),
+        RecordTopics::DeleteFile.topic(),
         arg_content,
     )
 }
