@@ -1,3 +1,5 @@
+#[allow(unused)]
 pub use ic_canister_kit::types::*;
 
-pub use crate::core::types::*;
+#[allow(unused)]
+pub use crate::stable::*;

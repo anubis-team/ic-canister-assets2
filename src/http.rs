@@ -9,31 +9,21 @@ use crate::explore::explore;
 use crate::stable::State;
 use crate::types::*;
 
-// 为了自动生成 did，这个方法仅仅为了占位
-#[candid::candid_method(query, rename = "http_request")]
-fn __http_request(_req: CustomHttpRequest) -> CustomHttpResponse<'static> {
-    todo!()
-}
+// https://github.com/dfinity/examples/blob/8b01d548d8548a9d4558a7a1dbb49234d02d7d03/motoko/http_counter/src/main.mo
 
-// 请求 nft 数据
-// This could reply with a lot of data. To return this data from the function would require it to be cloned,
-// because the thread_local! closure prevents us from returning data borrowed from inside it.
-// Luckily, it doesn't actually get returned from the exported WASM function, that's just an abstraction.
-// What happens is it gets fed to call::reply, and we can do that explicitly to save the cost of cloning the data.
-// #[query] calls call::reply unconditionally, and calling it twice would trap, so we use #[export_name] directly.
-// This requires duplicating the rest of the abstraction #[query] provides for us, like setting up the panic handler with
-// ic_cdk::setup() and fetching the function parameters via call::arg_data.
-// cdk 0.5 makes this unnecessary, but it has not been released at the time of writing this example.
-// #[ic_cdk::query(name = "http_request")] // 这种写法不行，总是报错
-#[export_name = "canister_query http_request"] // 必须这种写法
-fn http_request() {
-    ic_cdk::setup();
-    let req = ic_cdk::api::call::arg_data::<(CustomHttpRequest,)>().0; // 取得请求参数，也就是请求体
-    crate::stable::with_state(|_state| _http_request(req, _state));
+// #[ic_cdk::update]
+// fn http_request_update(request: CustomHttpRequest) -> CustomHttpResponse {
+//     todo!()
+// }
+
+// 请求数据
+#[ic_cdk::query]
+fn http_request(request: CustomHttpRequest) -> CustomHttpResponse {
+    crate::stable::with_state(|state| inner_http_request(state, request))
 }
 
 #[inline]
-fn _http_request(req: CustomHttpRequest, state: &State) {
+fn inner_http_request(state: &State, req: CustomHttpRequest) -> CustomHttpResponse {
     let mut split_url = req.url.split('?');
     let request_headers = req.headers;
 
@@ -56,9 +46,9 @@ fn _http_request(req: CustomHttpRequest, state: &State) {
         body = explore(&mut headers, state); // 主页内容
     } else {
         // 根据路径找文件
-        let file = state.assets.files.get(path.as_ref());
+        let file = state.business_assets_files().get(path.as_ref());
         if let Some(file) = file {
-            let asset = state.assets.assets.get(&file.hash);
+            let asset = state.business_assets_assets().get(&file.hash);
             if let Some(asset) = asset {
                 let (_body, _streaming_strategy): (Vec<u8>, Option<StreamingStrategy>) = toast(
                     &path,
@@ -79,12 +69,16 @@ fn _http_request(req: CustomHttpRequest, state: &State) {
         }
     }
 
-    ic_cdk::api::call::reply((CustomHttpResponse {
+    CustomHttpResponse {
         status_code: code,
-        headers,
-        body: body.into(),
+        headers: headers
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+        body,
         streaming_strategy,
-    },));
+        upgrade: None,
+    }
 }
 
 fn toast<'a>(
@@ -271,7 +265,7 @@ fn not_found<'a>(code: &mut u16, headers: &mut HashMap<&'a str, Cow<'a, str>>) -
 
 // 流式响应回调
 #[ic_cdk::query]
-fn http_request_streaming_callback(
+fn http_streaming(
     StreamingCallbackToken {
         path,
         params,
@@ -296,9 +290,9 @@ fn http_request_streaming_callback(
         };
     }
     crate::stable::with_state(|state| {
-        let file = state.assets.files.get(&path);
+        let file = state.business_assets_files().get(&path);
         if let Some(file) = file {
-            let asset = state.assets.assets.get(&file.hash);
+            let asset = state.business_assets_assets().get(&file.hash);
             if let Some(asset) = asset {
                 // 如果过长, 需要阶段显示
                 let start = start as usize;

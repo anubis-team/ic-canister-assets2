@@ -1,13 +1,73 @@
-use std::collections::HashMap;
+use std::str::FromStr;
 
-use candid::{CandidType, Deserialize};
-use ic_canister_kit::{
-    times::{now, Timestamp},
-    types::Stable,
-};
+use candid::CandidType;
+use ic_canister_kit::times::now;
+use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
+use strum_macros::{EnumIter, EnumString};
+
+pub use ic_canister_kit::types::*;
+
+#[allow(unused)]
+pub use super::super::{Business, ParsePermission, ScheduleTask};
+
+#[allow(unused)]
+pub use super::super::business::*;
+#[allow(unused)]
+pub use super::business::*;
+#[allow(unused)]
+pub use super::permission::*;
+#[allow(unused)]
+pub use super::schedule::schedule_task;
+
+#[allow(unused)]
+#[derive(Debug, Clone, Copy, EnumIter, EnumString, strum_macros::Display)]
+pub enum RecordTopics {
+    // ! 新的权限类型从 0 开始
+    Upload = 0, // 上传文件
+
+    // ! 系统倒序排列
+    CyclesCharge = 249, // 充值
+    Upgrade = 250,      // 升级
+    Schedule = 251,     // 定时任务
+    Record = 252,       // 记录
+    Permission = 253,   // 权限
+    Pause = 254,        // 维护
+    Initial = 255,      // 初始化
+}
+#[allow(unused)]
+impl RecordTopics {
+    pub fn topic(&self) -> RecordTopic {
+        *self as u8
+    }
+    pub fn topics() -> Vec<String> {
+        RecordTopics::iter().map(|x| x.to_string()).collect()
+    }
+    pub fn from(topic: &str) -> Result<Self, strum::ParseError> {
+        RecordTopics::from_str(topic)
+    }
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
+pub struct InnerState {
+    pub pause: Pause,             // 记录维护状态
+    pub permissions: Permissions, // 记录自身权限
+    pub records: Records,         // 记录操作记录
+    pub schedule: Schedule,       // 记录定时任务
+    // 记录业务数据
+    pub business: InnerBusiness,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
+pub struct InnerBusiness {
+    pub assets: CoreAssets,
+    pub uploading: UploadingAssets,
+}
+
+// ============================== 文件数据 ==============================
 
 // 单个文件数据
-#[derive(CandidType, Deserialize, Default, Debug, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct AssetData {
     pub hash: String,
     pub size: u64,
@@ -15,59 +75,21 @@ pub struct AssetData {
 }
 
 // 对外的路径数据 指向文件数据
-#[derive(CandidType, Deserialize, Default, Debug, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct AssetFile {
     pub path: String,
-    pub created: Timestamp,
-    pub modified: Timestamp,
+    pub created: TimestampNanos,
+    pub modified: TimestampNanos,
     pub headers: Vec<(String, String)>,
     pub hash: String,
 }
 
 // 需要存储的对象
-#[derive(Default, Debug, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CoreAssets {
     pub assets: HashMap<String, AssetData>, // key 是 hash
     pub files: HashMap<String, AssetFile>,  // key 是 path
     hashes: HashMap<String, Vec<String>>, // key 是 hash, value 是 path, 没有 path 的数据是没有保存意义的
-}
-
-pub type CoreAssetsState = (Vec<AssetData>, Vec<AssetFile>);
-
-impl Stable<CoreAssetsState, CoreAssetsState> for CoreAssets {
-    fn store(&mut self) -> CoreAssetsState {
-        let assets = std::mem::take(&mut self.assets);
-        let assets = assets.into_iter().map(|(_, asset)| asset).collect();
-        let files = std::mem::take(&mut self.files);
-        let files = files.into_iter().map(|(_, file)| file).collect();
-        (assets, files)
-    }
-
-    fn restore(&mut self, restore: CoreAssetsState) {
-        // assets: hash -> data
-        let assets = restore.0;
-        let assets = assets
-            .into_iter()
-            .map(|asset| (asset.hash.clone(), asset))
-            .collect();
-        // files: path -> hash
-        let files = restore.1;
-        let files: HashMap<String, AssetFile> = files
-            .into_iter()
-            .map(|file| (file.path.clone(), file))
-            .collect();
-        // hashes: hash -> [path]
-        self.hashes.clear();
-        for (path, file) in files.iter() {
-            if !self.hashes.contains_key(&file.hash) {
-                self.hashes.insert(file.hash.clone(), vec![]);
-            }
-            let hash_path = self.hashes.get_mut(&file.hash).unwrap();
-            hash_path.push(path.clone());
-        }
-        let _ = std::mem::replace(&mut self.assets, assets);
-        let _ = std::mem::replace(&mut self.files, files);
-    }
 }
 
 impl CoreAssets {
@@ -175,19 +197,19 @@ impl CoreAssets {
     }
 }
 
-#[derive(CandidType, Deserialize, Default, Debug, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct QueryFile {
     pub path: String,
     pub size: u64,
     pub headers: Vec<(String, String)>,
-    pub created: Timestamp,
-    pub modified: Timestamp,
+    pub created: TimestampNanos,
+    pub modified: TimestampNanos,
     pub hash: String,
 }
 
 // =========== 上传过程中的对象 ===========
 
-#[derive(CandidType, Deserialize, Default, Debug, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct UploadingFile {
     pub path: String,
     pub headers: Vec<(String, String)>,
@@ -200,32 +222,13 @@ pub struct UploadingFile {
 }
 
 // 需要存储的对象
-#[derive(Default, Debug, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
 pub struct UploadingAssets {
     files: HashMap<String, UploadingFile>, // key 是 path
 }
 
-pub type UploadingAssetsState = (Vec<UploadingFile>,);
-
-impl Stable<UploadingAssetsState, UploadingAssetsState> for UploadingAssets {
-    fn store(&mut self) -> UploadingAssetsState {
-        let files = std::mem::take(&mut self.files);
-        let files = files.into_iter().map(|(_, file)| file).collect();
-        (files,)
-    }
-
-    fn restore(&mut self, restore: UploadingAssetsState) {
-        let files = restore.0;
-        let files = files
-            .into_iter()
-            .map(|file| (file.path.clone(), file))
-            .collect();
-        let _ = std::mem::replace(&mut self.files, files);
-    }
-}
-
 // 上传参数
-#[derive(CandidType, Deserialize, Default, Debug, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct UploadingArg {
     pub path: String,
     pub headers: Vec<(String, String)>, // 使用的 header

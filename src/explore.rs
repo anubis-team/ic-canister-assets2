@@ -1,14 +1,14 @@
 use std::{borrow::Cow, collections::HashMap};
 
-use crate::stable::State;
+use crate::stable::{Business, State};
 
-pub const HTML: &str = include_str!("../explore/index.html");
-pub const CSS: &str = include_str!("../explore/index.css");
+pub const HTML: &str = include_str!("../web/index.html");
+pub const CSS: &str = include_str!("../web/index.css");
 
 pub fn explore<'a>(headers: &mut HashMap<&'a str, Cow<'a, str>>, state: &State) -> Vec<u8> {
     headers.insert("Content-Type", "text/html".into());
 
-    let files = state.assets.files();
+    let files = state.business_files();
     let mut json = String::from("");
     json.push_str("[");
     json.push_str(
@@ -24,8 +24,8 @@ pub fn explore<'a>(headers: &mut HashMap<&'a str, Cow<'a, str>>, state: &State) 
                         .map(|(key, value)| format!("{{key:\"{}\",value:\"{}\"}}", key, value))
                         .collect::<Vec<String>>()
                         .join(","),
-                    file.created / 1000000,
-                    file.modified / 1000000,
+                    file.created.into_inner() / 1000000,
+                    file.modified.into_inner() / 1000000,
                     file.hash
                 )
             })

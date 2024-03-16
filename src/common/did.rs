@@ -2,16 +2,17 @@
 
 /// 暴露出方法, 用这种 mock 方法来告诉 cdk 要生成对应的 did 接口
 /// 由于测试方法和真正的方法有冲突，这里和下面的方法进行分开
-#[candid::candid_method(query, rename = "__get_candid_interface_tmp_hack")]
-fn __export_candid() -> String {
+#[candid::candid_method(query)]
+#[cfg(test)]
+fn __get_candid_interface_tmp_hack() -> String {
     todo!()
 }
 
 /// 这里是具体代码执行的逻辑，非测试编译才包含
 /// 一旦有这个，后面测试的方法就不管用了，因此配置非测试环境下包含该方法
-#[ic_cdk::query(name = "__get_candid_interface_tmp_hack")]
+#[ic_cdk::query]
 #[cfg(not(test))]
-fn export_candid() -> String {
+fn __get_candid_interface_tmp_hack() -> String {
     #[allow(unused_imports)]
     use crate::types::*;
 
@@ -23,9 +24,9 @@ fn export_candid() -> String {
 
 /// 测试方法 打印输出 candid 文件内容
 /// 执行代码
-/// `cargo test print_did -- --nocapture`
+/// `cargo test update_candid -- --nocapture`
 #[test]
-fn print_did() {
+fn update_candid() {
     #[allow(unused_imports)]
     use crate::types::*;
 
@@ -33,12 +34,12 @@ fn print_did() {
 
     let text = __export_service(); // 取得 candid 内容
 
-    std::println!("{}", text); // 控制台输出
+    // std::println!("{}", text); // 控制台输出
 
     // 输出到对应的文件
     use std::io::Write;
     let filename = "sources/source.did"; // 输出至 did 文件
-    std::fs::remove_file(filename).unwrap();
+    let _ = std::fs::remove_file(filename);
     std::fs::File::create(&filename)
         .expect("create failed")
         .write_all(text.as_bytes())
