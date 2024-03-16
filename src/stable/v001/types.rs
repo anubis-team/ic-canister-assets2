@@ -66,10 +66,19 @@ pub struct InnerBusiness {
 
 // ============================== 文件数据 ==============================
 
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct HashDigest([u8; 32]);
+
+impl HashDigest {
+    pub fn to_hex(&self) -> String {
+        hex::encode(&self.0)
+    }
+}
+
 // 单个文件数据
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct AssetData {
-    pub hash: String,
+    pub hash: HashDigest,
     pub size: u64,
     pub data: Vec<u8>, // 实际数据
 }
@@ -81,24 +90,24 @@ pub struct AssetFile {
     pub created: TimestampNanos,
     pub modified: TimestampNanos,
     pub headers: Vec<(String, String)>,
-    pub hash: String,
+    pub hash: HashDigest,
 }
 
 // 需要存储的对象
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CoreAssets {
-    pub assets: HashMap<String, AssetData>, // key 是 hash
-    pub files: HashMap<String, AssetFile>,  // key 是 path
-    hashes: HashMap<String, Vec<String>>, // key 是 hash, value 是 path, 没有 path 的数据是没有保存意义的
+    pub assets: HashMap<HashDigest, AssetData>, // key 是 hash
+    pub files: HashMap<String, AssetFile>,      // key 是 path
+    hashes: HashMap<HashDigest, Vec<String>>, // key 是 hash, value 是 path, 没有 path 的数据是没有保存意义的
 }
 
 impl CoreAssets {
-    pub fn hash(file: &UploadingFile) -> String {
+    pub fn hash(file: &UploadingFile) -> HashDigest {
         use sha2::Digest;
         let mut hasher = sha2::Sha256::new();
         hasher.update(&file.data[0..(file.size as usize)]);
         let digest: [u8; 32] = hasher.finalize().into();
-        hex::encode(&digest)
+        HashDigest(digest)
     }
     pub fn put(&mut self, file: &UploadingFile) {
         // 1. 计算 hash
@@ -109,7 +118,7 @@ impl CoreAssets {
             self.assets.insert(
                 hash.clone(),
                 AssetData {
-                    hash: hash.clone(),
+                    hash,
                     size: file.size,
                     data,
                 },
@@ -180,7 +189,7 @@ impl CoreAssets {
                     headers: file.headers.clone(),
                     created: file.created,
                     modified: file.modified,
-                    hash: file.hash.clone(),
+                    hash: hex::encode(file.hash.0),
                 }
             })
             .collect()

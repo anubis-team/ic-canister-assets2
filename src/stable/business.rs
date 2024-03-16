@@ -25,7 +25,7 @@ pub trait Business:
     fn business_delete(&mut self, names: Vec<String>);
 
     fn business_assets_files(&self) -> &HashMap<String, AssetFile>;
-    fn business_assets_assets(&self) -> &HashMap<String, AssetData>;
+    fn business_assets_assets(&self) -> &HashMap<HashDigest, AssetData>;
 }
 
 // 业务实现
@@ -51,7 +51,7 @@ impl Business for State {
     fn business_assets_files(&self) -> &HashMap<String, AssetFile> {
         self.get().business_assets_files()
     }
-    fn business_assets_assets(&self) -> &HashMap<String, AssetData> {
+    fn business_assets_assets(&self) -> &HashMap<HashDigest, AssetData> {
         self.get().business_assets_assets()
     }
 }

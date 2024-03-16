@@ -156,7 +156,7 @@ fn set_headers<'a>(
 
     // 额外增加的请求头
     headers.insert("Accept-Ranges", "bytes".into()); // 支持范围请求
-    headers.insert("ETag", file.hash.to_string().into()); // 缓存标识
+    headers.insert("ETag", file.hash.to_hex().into()); // 缓存标识
 
     // 访问控制
     headers.insert("Access-Control-Allow-Origin", "*".into());

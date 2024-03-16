@@ -25,7 +25,9 @@ impl Business for InnerState {
     fn business_assets_files(&self) -> &HashMap<String, crate::stable::AssetFile> {
         panic!("Not supported operation by this version.")
     }
-    fn business_assets_assets(&self) -> &HashMap<String, crate::stable::AssetData> {
+    fn business_assets_assets(
+        &self,
+    ) -> &HashMap<crate::stable::HashDigest, crate::stable::AssetData> {
         panic!("Not supported operation by this version.")
     }
 }
