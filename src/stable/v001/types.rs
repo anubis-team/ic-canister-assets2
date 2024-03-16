@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use candid::CandidType;
-use ic_canister_kit::times::now;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumString};
@@ -116,7 +115,7 @@ impl CoreAssets {
             );
         }
         // 3. 插入 files: path -> hash
-        let now = now();
+        let now = ic_canister_kit::times::now();
         if self.files.contains_key(&file.path) {
             let exist = self.files.get_mut(&file.path).unwrap();
             exist.modified = now;
