@@ -46,8 +46,25 @@ impl RecordTopics {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
 pub struct InnerState {
+    // ? 堆内存 不需要序列化的数据
+
+    // ? 堆内存 需要序列化的数据
+    pub heap_state: HeapState,
+    // ? 稳定内存
+}
+
+impl Default for InnerState {
+    fn default() -> Self {
+        ic_cdk::println!("InnerState::default()");
+        Self {
+            heap_state: Default::default(),
+        }
+    }
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
+pub struct HeapState {
     pub pause: Pause,             // 记录维护状态
     pub permissions: Permissions, // 记录自身权限
     pub records: Records,         // 记录操作记录

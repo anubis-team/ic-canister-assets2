@@ -65,7 +65,15 @@ fn initial(arg: Option<CanisterInitialArg>) {
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
     STATE.with(|state| {
-        let record_id = ic_canister_kit::stable::restore_after_upgrade(state);
+        #[allow(clippy::unwrap_used)] // ? SAFETY
+        let (record_id, version, bytes): (Option<RecordId>, u32, Vec<u8>) =
+            ic_cdk::storage::stable_restore().unwrap();
+
+        // 利用版本号恢复升级前的版本
+        let mut last_state = State::from_version(version);
+        last_state.heap_from_bytes(&bytes); // 恢复数据
+        *state.borrow_mut() = last_state;
+
         state.borrow_mut().upgrade(); // ! 恢复后要进行升级到最新版本
         let schedule = state.borrow().schedule_find();
         state.borrow_mut().init(CanisterInitialArg { schedule }); // ! 升级到最新版本后, 需要执行初始化操作
@@ -88,12 +96,16 @@ fn pre_upgrade() {
         #[allow(clippy::unwrap_used)] // ? SAFETY
         state.borrow().pause_must_be_paused().unwrap(); // ! 必须是维护状态, 才可以升级
         state.borrow_mut().schedule_stop(); // * 停止定时任务
+
         let record_id = state.borrow_mut().record_push(
             caller,
             RecordTopics::Upgrade.topic(),
             format!("Upgrade by {}", caller.to_text()),
         );
-        ic_canister_kit::stable::store_before_upgrade(state, Some(record_id));
+        let version = state.borrow().version();
+        let bytes = state.borrow().heap_to_bytes();
+        #[allow(clippy::unwrap_used)] // ? SAFETY
+        ic_cdk::storage::stable_save((record_id, version, bytes)).unwrap();
     });
 }
 
@@ -268,3 +280,13 @@ pub trait ScheduleTask: Schedulable {
 }
 
 impl ScheduleTask for State {}
+
+impl StableHeap for State {
+    fn heap_to_bytes(&self) -> Vec<u8> {
+        self.get().heap_to_bytes()
+    }
+
+    fn heap_from_bytes(&mut self, bytes: &[u8]) {
+        self.get_mut().heap_from_bytes(bytes)
+    }
+}

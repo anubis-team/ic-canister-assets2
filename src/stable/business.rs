@@ -15,6 +15,7 @@ pub trait Business:
     + Recordable<Record, RecordTopic, RecordSearch>
     + Schedulable
     + ScheduleTask
+    + StableHeap
 {
     fn business_files(&self) -> Vec<QueryFile>;
     fn business_download(&self, path: String) -> Vec<u8>;

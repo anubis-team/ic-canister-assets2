@@ -30,7 +30,6 @@ mod v001;
 // !     👇👇 UPGRADE WARNING: 必须是当前代码的版本
 pub use v001::types::*;
 
-#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub enum State {
     V0(Box<v000::types::InnerState>),
     V1(Box<v001::types::InnerState>),
