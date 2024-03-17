@@ -317,7 +317,7 @@ fn load_remote_files() -> Vec<RemoteFile> {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("Time went backwards");
 
-    let output = Command::new("/usr/local/bin/dfx")
+    let output = Command::new("dfx")
         .current_dir(".")
         .arg("--identity")
         .arg(IDENTITY)
@@ -326,7 +326,7 @@ fn load_remote_files() -> Vec<RemoteFile> {
         .arg(NETWORK)
         .arg("call")
         .arg("ic-canister-assets")
-        .arg("files")
+        .arg("business_files")
         .arg("()")
         .arg("--output")
         .arg("idl")
@@ -348,7 +348,7 @@ fn load_remote_files() -> Vec<RemoteFile> {
 
     eprintln!(">>>>>>>>>> ERROR <<<<<<<<<<<");
     eprintln!("identity: {}", IDENTITY);
-    eprintln!("api: {}", "files");
+    eprintln!("api: {}", "business_files");
     eprintln!("arg: {}", "");
     eprintln!("status: {}", output.status);
     if format!("{}", output.status).eq("exit status: 0") {
@@ -383,26 +383,26 @@ fn parse_remote_files(output: String) -> Vec<RemoteFile> {
         // 解析 created
         let content = (&content[10..]).to_string();
         let created: u64 = content
-            .split(r#" : nat64; modified = "#)
+            .split(r#" : int; modified = "#)
             .next()
             .unwrap()
             .to_string()
             .replace("_", "")
             .parse()
             .unwrap();
-        let mut content = content.split(r#" : nat64; modified = "#);
+        let mut content = content.split(r#" : int; modified = "#);
         content.next();
         let content = content.next().unwrap();
         // 解析 modified
         let modified: u64 = content
-            .split(r#" : nat64; hash = ""#)
+            .split(r#" : int; hash = ""#)
             .next()
             .unwrap()
             .to_string()
             .replace("_", "")
             .parse()
             .unwrap();
-        let mut content = content.split(r#" : nat64; hash = ""#);
+        let mut content = content.split(r#" : int; hash = ""#);
         content.next();
         let content = content.next().unwrap();
         // 解析 hash
@@ -473,7 +473,7 @@ fn delete_files(names: Vec<String>) {
             .join(";")
     );
 
-    let output = Command::new("/usr/local/bin/dfx")
+    let output = Command::new("dfx")
         .current_dir(".")
         .arg("--identity")
         .arg(IDENTITY)
@@ -482,7 +482,7 @@ fn delete_files(names: Vec<String>) {
         .arg(NETWORK)
         .arg("call")
         .arg("ic-canister-assets")
-        .arg("delete")
+        .arg("business_delete")
         .arg(&args)
         .arg("--output")
         .arg("idl")
@@ -502,7 +502,7 @@ fn delete_files(names: Vec<String>) {
 
     eprintln!(">>>>>>>>>> ERROR <<<<<<<<<<<");
     eprintln!("identity: {}", IDENTITY);
-    eprintln!("api: {}", "delete");
+    eprintln!("api: {}", "business_delete");
     eprintln!("arg: {}", args);
     eprintln!("status: {}", output.status);
     if format!("{}", output.status).eq("exit status: 0") {
@@ -656,7 +656,7 @@ fn do_upload_file_to_canister(arg: &str, local_files: &Vec<UploadFile>) -> Resul
         .duration_since(std::time::UNIX_EPOCH)
         .expect("Time went backwards");
 
-    let output = Command::new("/usr/local/bin/dfx")
+    let output = Command::new("dfx")
         .current_dir(".")
         .arg("--identity")
         .arg(IDENTITY)
@@ -667,7 +667,7 @@ fn do_upload_file_to_canister(arg: &str, local_files: &Vec<UploadFile>) -> Resul
         .arg("--argument-file")
         .arg(arg)
         .arg("ic-canister-assets")
-        .arg("upload")
+        .arg("business_upload")
         .arg("--output")
         .arg("idl")
         .output();
@@ -697,7 +697,7 @@ fn do_upload_file_to_canister(arg: &str, local_files: &Vec<UploadFile>) -> Resul
 
     eprintln!(">>>>>>>>>> ERROR <<<<<<<<<<<");
     eprintln!("identity: {}", IDENTITY);
-    eprintln!("api: {}", "upload");
+    eprintln!("api: {}", "business_upload");
     eprintln!("arg: {}", arg);
     eprintln!("status: {}", output.status);
     if format!("{}", output.status).eq("exit status: 0") {
