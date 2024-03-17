@@ -4,25 +4,25 @@ use super::types::*;
 #[allow(unused_variables)]
 impl Business for InnerState {
     fn business_files(&self) -> Vec<QueryFile> {
-        self.business.files()
+        self.files()
     }
     fn business_download(&self, path: String) -> Vec<u8> {
-        self.business.download(path)
+        self.download(path)
     }
     fn business_download_by(&self, path: String, offset: u64, offset_end: u64) -> Vec<u8> {
-        self.business.download_by(path, offset, offset_end)
+        self.download_by(path, offset, offset_end)
     }
 
     fn business_upload(&mut self, args: Vec<UploadingArg>) {
         for arg in args {
-            self.business.put_uploading(arg)
+            self.put_uploading(arg)
         }
     }
 
     fn business_delete(&mut self, names: Vec<String>) {
         for name in names {
-            self.business.clean_uploading(&name);
-            self.business.clean_file(&name);
+            self.clean_uploading(&name);
+            self.clean_file(&name);
         }
     }
 

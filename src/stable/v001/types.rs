@@ -69,7 +69,9 @@ pub struct InnerBusiness {
 
 // ============================== 文件数据 ==============================
 
-#[derive(CandidType, Serialize, Deserialize, Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub struct HashDigest([u8; 32]);
 
 impl HashDigest {
@@ -94,6 +96,7 @@ pub struct AssetFile {
     pub modified: TimestampNanos,
     pub headers: Vec<(String, String)>,
     pub hash: HashDigest,
+    pub size: u64,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
@@ -136,7 +139,7 @@ pub struct QueryFile {
     pub hash: String,
 }
 
-impl InnerBusiness {
+impl InnerState {
     fn hash(file: &UploadingFile) -> HashDigest {
         use sha2::Digest;
         let mut hasher = sha2::Sha256::new();
@@ -148,19 +151,22 @@ impl InnerBusiness {
         // 1. 计算 hash
         let hash = Self::hash(&file);
         // 2. 插入 assets: hash -> data
-        self.assets.entry(hash).or_insert_with(|| AssetData {
-            hash,
-            size: file.size,
-            data: file.data,
-        });
+        self.business
+            .assets
+            .entry(hash)
+            .or_insert_with(|| AssetData {
+                hash,
+                size: file.size,
+                data: file.data,
+            });
         // 3. 插入 files: path -> hash
         let now = ic_canister_kit::times::now();
-        if let Some(exist) = self.files.get_mut(&file.path) {
+        if let Some(exist) = self.business.files.get_mut(&file.path) {
             exist.modified = now;
             exist.headers = file.headers;
             exist.hash = hash;
         } else {
-            self.files.insert(
+            self.business.files.insert(
                 file.path.clone(),
                 AssetFile {
                     path: file.path.clone(),
@@ -168,13 +174,14 @@ impl InnerBusiness {
                     modified: now,
                     headers: file.headers,
                     hash,
+                    size: file.size,
                 },
             );
         }
 
         // 4. 插入 hashes: hash -> [path]
-        self.hashes.entry(hash).or_default();
-        if let Some(hash_path) = self.hashes.get_mut(&hash) {
+        self.business.hashes.entry(hash).or_default();
+        if let Some(hash_path) = self.business.hashes.get_mut(&hash) {
             if !hash_path.0.contains(&file.path) {
                 hash_path.0.insert(file.path);
             }
@@ -182,32 +189,32 @@ impl InnerBusiness {
     }
     pub fn clean_file(&mut self, path: &String) {
         // 1. 找到文件
-        let file = match self.files.get(path) {
+        let file = match self.business.files.get(path) {
             Some(file) => file.clone(),
             None => return,
         };
         // 2. 清除 file
-        self.files.remove(path);
+        self.business.files.remove(path);
         // 3. 清除 hashes
-        if let Some(HashedPath(path_set)) = self.hashes.get_mut(&file.hash) {
+        if let Some(HashedPath(path_set)) = self.business.hashes.get_mut(&file.hash) {
             path_set.remove(&file.path);
             if path_set.is_empty() {
                 // 需要清空
-                self.hashes.remove(&file.hash);
+                self.business.hashes.remove(&file.hash);
                 // 4. 清空 assets
-                self.assets.remove(&file.hash);
+                self.business.assets.remove(&file.hash);
             }
         }
     }
     pub fn files(&self) -> Vec<QueryFile> {
-        self.files
+        self.business
+            .files
             .iter()
             .map(|(path, file)| {
                 #[allow(clippy::unwrap_used)] // ? SAFETY
-                let asset = self.assets.get(&file.hash).unwrap();
                 QueryFile {
                     path: path.to_string(),
-                    size: asset.size,
+                    size: file.size,
                     headers: file.headers.clone(),
                     created: file.created,
                     modified: file.modified,
@@ -218,16 +225,24 @@ impl InnerBusiness {
     }
     pub fn download(&self, path: String) -> Vec<u8> {
         #[allow(clippy::expect_used)] // ? SAFETY
-        let file = self.files.get(&path).expect("File not found");
+        let file = self.business.files.get(&path).expect("File not found");
         #[allow(clippy::expect_used)] // ? SAFETY
-        let asset = self.assets.get(&file.hash).expect("File not found");
+        let asset = self
+            .business
+            .assets
+            .get(&file.hash)
+            .expect("File not found");
         asset.data.clone()
     }
     pub fn download_by(&self, path: String, offset: u64, offset_end: u64) -> Vec<u8> {
         #[allow(clippy::expect_used)] // ? SAFETY
-        let file = self.files.get(&path).expect("File not found");
+        let file = self.business.files.get(&path).expect("File not found");
         #[allow(clippy::expect_used)] // ? SAFETY
-        let asset = self.assets.get(&file.hash).expect("File not found");
+        let asset = self
+            .business
+            .assets
+            .get(&file.hash)
+            .expect("File not found");
         (asset.data[(offset as usize)..(offset_end as usize)]).to_vec()
     }
 
@@ -279,7 +294,7 @@ impl InnerBusiness {
         }
     }
     fn check_file(&mut self, arg: &UploadingArg) {
-        if let Some(file) = self.uploading.get(&arg.path) {
+        if let Some(file) = self.business.uploading.get(&arg.path) {
             // 已经有这个文件了, 需要比较一下, 参数是否一致
             assert!(arg.path == file.path, "wrong path, system error.");
             let chunks = Self::chunks(arg);
@@ -290,12 +305,12 @@ impl InnerBusiness {
                 || file.chunked.len() < file.chunks as usize
             {
                 // 非致命错误, 清空原来的文件就好
-                self.files.remove(&arg.path);
+                self.business.files.remove(&arg.path);
             }
         } else {
             // 原来没有的情况下
             let chunks = Self::chunks(arg);
-            self.uploading.insert(
+            self.business.uploading.insert(
                 arg.path.clone(),
                 UploadingFile {
                     path: arg.path.clone(),
@@ -318,7 +333,7 @@ impl InnerBusiness {
 
         // 2. 找的对应的缓存文件
         let mut done = false;
-        if let Some(file) = self.uploading.get_mut(&arg.path) {
+        if let Some(file) = self.business.uploading.get_mut(&arg.path) {
             // 3. 复制有效的信息
             let (offset, offset_end) = Self::offset(&arg);
             file.headers = arg.headers;
@@ -334,12 +349,12 @@ impl InnerBusiness {
             done = true; // 已经完成的
         }
         if done {
-            if let Some(file) = self.uploading.remove(&arg.path) {
+            if let Some(file) = self.business.uploading.remove(&arg.path) {
                 self.put_file(file);
             }
         }
     }
     pub fn clean_uploading(&mut self, path: &String) {
-        self.files.remove(path);
+        self.business.files.remove(path);
     }
 }
