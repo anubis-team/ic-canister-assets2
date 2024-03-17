@@ -1,3 +1,4 @@
+#[allow(unused)]
 use ic_canister_kit::common::once::call_once_guard;
 #[allow(unused)]
 use ic_canister_kit::identity::caller;
