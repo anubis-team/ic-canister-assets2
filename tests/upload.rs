@@ -3,8 +3,8 @@
 // 调用身份
 const IDENTITY: &str = "default";
 // 部署位置
-// const NETWORK: &str = "local";
-const NETWORK: &str = "ic";
+const NETWORK: &str = "local";
+// const NETWORK: &str = "ic";
 // 本地需要同步的文件夹
 const ASSETS_DIR: &str = "assets";
 // const ASSETS_DIR: &str = "empty"; // 删除所有数据
@@ -74,7 +74,7 @@ const EXT_CONTENT_TYPES: [(&str, &str); 49] = [
     ("tif", "image/tiff"),
     ("tiff", "image/tiff"),
     ("ico", "image/x-icon"),
-    ("mp4", "video/mp4"), // 视频
+    ("mp4", "video/mp4"),       // 视频
     ("avi", "video/x-msvideo"), // cspell: disable-line
     ("mov", "video/quicktime"), // cspell: disable-line
     ("mpeg", "video/mpeg"),
@@ -91,7 +91,7 @@ const EXT_CONTENT_TYPES: [(&str, &str); 49] = [
     ("midi", "audio/midi"),
     ("ra", "audio/x-realaudio"),  // cspell: disable-line
     ("ram", "audio/x-realaudio"), // cspell: disable-line
-    ("otf", "font/otf"), // 字体
+    ("otf", "font/otf"),          // 字体
     ("ttf", "font/ttf"),
     ("woff", "font/woff"),
     ("woff2", "font/woff2"),
@@ -187,24 +187,24 @@ fn load_local_files(prefix: &str, dir_path: &str, files: &mut Vec<LocalFile>) {
         let file_name = entry.file_name();
         let file_type = entry.file_type().unwrap();
 
-            let path = format!("{}/{}", dir_path, file_name.to_str().unwrap().to_string());
-            fn is_ignore(path: &str) -> bool {
-                for ignore in IGNORE_FILES {
-                    if path.ends_with(ignore) {
-                        return true;
-                    }
+        let path = format!("{}/{}", dir_path, file_name.to_str().unwrap().to_string());
+        fn is_ignore(path: &str) -> bool {
+            for ignore in IGNORE_FILES {
+                if path.ends_with(ignore) {
+                    return true;
                 }
-                false
             }
+            false
+        }
 
         if is_ignore(&path) {
             continue; // 是否是被忽略的文件或目录
         }
 
         if file_type.is_file() {
-                let mut file = load_local_file(&path);
-                file.path = (&file.path[prefix.len()..]).to_string();
-                files.push(file);
+            let mut file = load_local_file(&path);
+            file.path = (&file.path[prefix.len()..]).to_string();
+            files.push(file);
         } else if file_type.is_dir() {
             // 目录还需要进行递归
             load_local_files(prefix, &path, files);
