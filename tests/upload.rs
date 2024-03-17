@@ -64,7 +64,7 @@ const EXT_CONTENT_TYPES: [(&str, &str); 49] = [
     ("pdf", "application/pdf"),
     ("zip", "application/zip"),
     ("7z", "application/x-7z-compressed"),
-    ("eot", "application/vnd.ms-fontobject"), // 字体
+    ("eot", "application/vnd.ms-fontobject"), // 字体// cspell: disable-line
     ("png", "image/png"),                     // 图片
     ("gif", "image/gif"),
     ("jpg", "image/jpeg"),
@@ -75,22 +75,22 @@ const EXT_CONTENT_TYPES: [(&str, &str); 49] = [
     ("tiff", "image/tiff"),
     ("ico", "image/x-icon"),
     ("mp4", "video/mp4"), // 视频
-    ("avi", "video/x-msvideo"),
-    ("mov", "video/quicktime"),
+    ("avi", "video/x-msvideo"), // cspell: disable-line
+    ("mov", "video/quicktime"), // cspell: disable-line
     ("mpeg", "video/mpeg"),
     ("ogv", "video/ogg"),
     ("webm", "video/webm"),
     ("mp3", "audio/mp3"), // 音频
     ("wav", "audio/wav"),
-    ("flac", "audio/flac"),
+    ("flac", "audio/flac"), // cspell: disable-line
     ("aac", "audio/aac"),
     ("webm", "audio/webm"),
     ("oga", "audio/ogg"),
     ("wma", "audio/x-ms-wma"),
     ("mid", "audio/midi"),
     ("midi", "audio/midi"),
-    ("ra", "audio/x-realaudio"),
-    ("ram", "audio/x-realaudio"),
+    ("ra", "audio/x-realaudio"),  // cspell: disable-line
+    ("ram", "audio/x-realaudio"), // cspell: disable-line
     ("otf", "font/otf"), // 字体
     ("ttf", "font/ttf"),
     ("woff", "font/woff"),

@@ -1,19 +1,11 @@
 {
   "cSpell.words": [
     "chrono",
-    "flac",
-    "fontobject",
     "hasher",
-    "msvideo",
     "nanos",
     "nocapture",
-    "packtool",
     "Pausable",
-    "quicktime",
-    "realaudio",
     "rustdoc",
-    "Schedulable",
-    "stylesheet",
-    "weba"
+    "Schedulable"
   ]
 }
