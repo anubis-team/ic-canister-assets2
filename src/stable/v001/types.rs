@@ -60,8 +60,11 @@ pub struct InnerState {
 
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
 pub struct InnerBusiness {
-    pub assets: CoreAssets,
-    pub uploading: UploadingAssets,
+    pub assets: HashMap<HashDigest, AssetData>, // key 是 hash
+    pub files: HashMap<String, AssetFile>,      // key 是 path
+    hashes: HashMap<HashDigest, HashedPath>, // key 是 hash, value 是 path, 没有 path 的数据是没有保存意义的
+
+    uploading: HashMap<String, UploadingFile>, // key 是 path
 }
 
 // ============================== 文件数据 ==============================
@@ -93,39 +96,68 @@ pub struct AssetFile {
     pub hash: HashDigest,
 }
 
-// 需要存储的对象
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
-pub struct CoreAssets {
-    pub assets: HashMap<HashDigest, AssetData>, // key 是 hash
-    pub files: HashMap<String, AssetFile>,      // key 是 path
-    hashes: HashMap<HashDigest, Vec<String>>, // key 是 hash, value 是 path, 没有 path 的数据是没有保存意义的
+pub struct HashedPath(HashSet<String>);
+
+// =========== 上传过程中的对象 ===========
+
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
+pub struct UploadingFile {
+    pub path: String,
+    pub headers: Vec<(String, String)>,
+    pub data: Vec<u8>, // 上传中的数据
+
+    pub size: u64,          // 文件大小
+    pub chunk_size: u64,    // 块大小
+    pub chunks: u32,        // 需要上传的次数
+    pub chunked: Vec<bool>, // 记录每一个块的上传状态
 }
 
-impl CoreAssets {
-    pub fn hash(file: &UploadingFile) -> HashDigest {
+// 上传参数
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
+pub struct UploadingArg {
+    pub path: String,
+    pub headers: Vec<(String, String)>, // 使用的 header
+    pub size: u64,                      // 文件大小
+    pub chunk_size: u64,                // 块大小
+    pub index: u32,                     // 本次上传的数据
+    pub chunk: Vec<u8>,                 // 上传中的数据
+}
+
+// =========== 查询的对象 ===========
+
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
+pub struct QueryFile {
+    pub path: String,
+    pub size: u64,
+    pub headers: Vec<(String, String)>,
+    pub created: TimestampNanos,
+    pub modified: TimestampNanos,
+    pub hash: String,
+}
+
+impl InnerBusiness {
+    fn hash(file: &UploadingFile) -> HashDigest {
         use sha2::Digest;
         let mut hasher = sha2::Sha256::new();
         hasher.update(&file.data[0..(file.size as usize)]);
         let digest: [u8; 32] = hasher.finalize().into();
         HashDigest(digest)
     }
-    pub fn put(&mut self, file: &UploadingFile) {
+    pub fn put_file(&mut self, file: UploadingFile) {
         // 1. 计算 hash
-        let hash = CoreAssets::hash(file);
+        let hash = Self::hash(&file);
         // 2. 插入 assets: hash -> data
-        self.assets.entry(hash).or_insert_with(|| {
-            let data = (file.data[0..(file.size as usize)]).to_vec();
-            AssetData {
-                hash,
-                size: file.size,
-                data,
-            }
+        self.assets.entry(hash).or_insert_with(|| AssetData {
+            hash,
+            size: file.size,
+            data: file.data,
         });
         // 3. 插入 files: path -> hash
         let now = ic_canister_kit::times::now();
         if let Some(exist) = self.files.get_mut(&file.path) {
             exist.modified = now;
-            exist.headers = file.headers.clone();
+            exist.headers = file.headers;
             exist.hash = hash;
         } else {
             self.files.insert(
@@ -134,7 +166,7 @@ impl CoreAssets {
                     path: file.path.clone(),
                     created: now,
                     modified: now,
-                    headers: file.headers.clone(),
+                    headers: file.headers,
                     hash,
                 },
             );
@@ -143,12 +175,12 @@ impl CoreAssets {
         // 4. 插入 hashes: hash -> [path]
         self.hashes.entry(hash).or_default();
         if let Some(hash_path) = self.hashes.get_mut(&hash) {
-            if !hash_path.contains(&file.path) {
-                hash_path.push(file.path.clone());
+            if !hash_path.0.contains(&file.path) {
+                hash_path.0.insert(file.path);
             }
         }
     }
-    pub fn clean(&mut self, path: &String) {
+    pub fn clean_file(&mut self, path: &String) {
         // 1. 找到文件
         let file = match self.files.get(path) {
             Some(file) => file.clone(),
@@ -157,19 +189,13 @@ impl CoreAssets {
         // 2. 清除 file
         self.files.remove(path);
         // 3. 清除 hashes
-        if let Some(path_list) = self.hashes.get_mut(&file.hash) {
-            let path_list: Vec<String> = path_list
-                .clone()
-                .into_iter()
-                .filter(|p| p != &file.path)
-                .collect();
-            if path_list.is_empty() {
+        if let Some(HashedPath(path_set)) = self.hashes.get_mut(&file.hash) {
+            path_set.remove(&file.path);
+            if path_set.is_empty() {
                 // 需要清空
                 self.hashes.remove(&file.hash);
                 // 4. 清空 assets
                 self.assets.remove(&file.hash);
-            } else {
-                self.hashes.insert(file.hash, path_list); // 插入新的
             }
         }
     }
@@ -204,50 +230,7 @@ impl CoreAssets {
         let asset = self.assets.get(&file.hash).expect("File not found");
         (asset.data[(offset as usize)..(offset_end as usize)]).to_vec()
     }
-}
 
-#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
-pub struct QueryFile {
-    pub path: String,
-    pub size: u64,
-    pub headers: Vec<(String, String)>,
-    pub created: TimestampNanos,
-    pub modified: TimestampNanos,
-    pub hash: String,
-}
-
-// =========== 上传过程中的对象 ===========
-
-#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
-pub struct UploadingFile {
-    pub path: String,
-    pub headers: Vec<(String, String)>,
-    pub data: Vec<u8>, // 上传中的数据
-
-    pub size: u64,          // 文件大小
-    pub chunk_size: u64,    // 块大小
-    pub chunks: u32,        // 需要上传的次数
-    pub chunked: Vec<bool>, // 记录每一个块的上传状态
-}
-
-// 需要存储的对象
-#[derive(CandidType, Serialize, Deserialize, Debug, Clone, Default)]
-pub struct UploadingAssets {
-    files: HashMap<String, UploadingFile>, // key 是 path
-}
-
-// 上传参数
-#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
-pub struct UploadingArg {
-    pub path: String,
-    pub headers: Vec<(String, String)>, // 使用的 header
-    pub size: u64,                      // 文件大小
-    pub chunk_size: u64,                // 块大小
-    pub index: u32,                     // 本次上传的数据
-    pub chunk: Vec<u8>,                 // 上传中的数据
-}
-
-impl UploadingAssets {
     fn chunks(arg: &UploadingArg) -> u32 {
         let mut chunks = arg.size / arg.chunk_size; // 完整的块数
         if chunks * arg.chunk_size < arg.size {
@@ -256,7 +239,7 @@ impl UploadingAssets {
         chunks as u32
     }
     fn offset(arg: &UploadingArg) -> (usize, usize) {
-        let chunks = UploadingAssets::chunks(arg);
+        let chunks = Self::chunks(arg);
         let offset = arg.chunk_size * arg.index as u64;
         let mut offset_end = offset + arg.chunk_size;
         if arg.index == chunks - 1 {
@@ -278,7 +261,7 @@ impl UploadingAssets {
         // 4. 检查 chunk_size
         assert!(0 < arg.chunk_size, "chunk size can not be 0");
         // 5. 检查 index
-        let chunks = UploadingAssets::chunks(arg);
+        let chunks = Self::chunks(arg);
         assert!(arg.index < chunks, "wrong index");
         // 6. 检查 data
         if arg.index < chunks - 1 || arg.size == arg.chunk_size * chunks as u64 {
@@ -296,10 +279,10 @@ impl UploadingAssets {
         }
     }
     fn check_file(&mut self, arg: &UploadingArg) {
-        if let Some(file) = self.files.get(&arg.path) {
+        if let Some(file) = self.uploading.get(&arg.path) {
             // 已经有这个文件了, 需要比较一下, 参数是否一致
             assert!(arg.path == file.path, "wrong path, system error.");
-            let chunks = UploadingAssets::chunks(arg);
+            let chunks = Self::chunks(arg);
             if arg.size != file.size // 文件长度不一致
                 || file.data.len() < file.size as usize // 暂存长度不对
                 || arg.chunk_size != file.chunk_size
@@ -311,8 +294,8 @@ impl UploadingAssets {
             }
         } else {
             // 原来没有的情况下
-            let chunks = UploadingAssets::chunks(arg);
-            self.files.insert(
+            let chunks = Self::chunks(arg);
+            self.uploading.insert(
                 arg.path.clone(),
                 UploadingFile {
                     path: arg.path.clone(),
@@ -326,17 +309,18 @@ impl UploadingAssets {
             );
         }
     }
-    pub fn put(&mut self, arg: UploadingArg) -> Option<&UploadingFile> {
+    pub fn put_uploading(&mut self, arg: UploadingArg) {
         // 0. 检查参数是否有效
-        UploadingAssets::check_arg(&arg);
+        Self::check_arg(&arg);
 
         // 1. 检查文件
         self.check_file(&arg);
 
         // 2. 找的对应的缓存文件
-        if let Some(file) = self.files.get_mut(&arg.path) {
+        let mut done = false;
+        if let Some(file) = self.uploading.get_mut(&arg.path) {
             // 3. 复制有效的信息
-            let (offset, offset_end) = UploadingAssets::offset(&arg);
+            let (offset, offset_end) = Self::offset(&arg);
             file.headers = arg.headers;
             file.data.splice(offset..offset_end, arg.chunk); // 复制内容
             file.chunked[arg.index as usize] = true;
@@ -344,14 +328,18 @@ impl UploadingAssets {
             // 4. 是否已经完整
             for uploaded in file.chunked.iter() {
                 if !uploaded {
-                    return None; // 还有没上传的
+                    return; // 还有没上传的
                 }
             }
-            return Some(file); // 已经完成的
+            done = true; // 已经完成的
         }
-        None
+        if done {
+            if let Some(file) = self.uploading.remove(&arg.path) {
+                self.put_file(file);
+            }
+        }
     }
-    pub fn clean(&mut self, path: &String) {
+    pub fn clean_uploading(&mut self, path: &String) {
         self.files.remove(path);
     }
 }
