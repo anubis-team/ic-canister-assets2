@@ -60,6 +60,10 @@ fn pause_query_reason() -> Option<PauseReason> {
 fn pause_replace(reason: Option<String>) {
     let old = with_state(|s| s.pause_query().clone());
 
+    if matches!(old, None) && matches!(reason, None) {
+        return; // 未改变内容
+    }
+
     let caller = caller();
     let arg_content = format!("{} -> {}", display_option(&old), display_option(&reason)); // * 记录参数内容
 
