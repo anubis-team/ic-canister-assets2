@@ -78,8 +78,9 @@ fn post_upgrade() {
         let schedule = state.borrow().schedule_find();
         state.borrow_mut().init(CanisterInitialArg { schedule }); // ! 升级到最新版本后, 需要执行初始化操作
         state.borrow_mut().schedule_reload(); // * 重置定时任务
-        let version = state.borrow().version();
+
         if let Some(record_id) = record_id {
+            let version = state.borrow().version();
             state
                 .borrow_mut()
                 .record_update(record_id, format!("Next version: {}", version));
@@ -104,6 +105,7 @@ fn pre_upgrade() {
         );
         let version = state.borrow().version();
         let bytes = state.borrow().heap_to_bytes();
+
         #[allow(clippy::unwrap_used)] // ? SAFETY
         ic_cdk::storage::stable_save((record_id, version, bytes)).unwrap();
     });
