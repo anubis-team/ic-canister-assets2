@@ -98,12 +98,13 @@ type StreamingStrategy = variant {
   };
 };
 type UploadingArg = record {
+  hash : vec nat8;
   chunk : vec nat8;
   path : text;
   size : nat64;
   headers : vec record { text; text };
   index : nat32;
-  chunk_size : nat64;
+  chunk_size : nat32;
 };
 service : (opt CanisterInitialArg) -> {
   __get_candid_interface_tmp_hack : () -> (text) query;
@@ -111,6 +112,8 @@ service : (opt CanisterInitialArg) -> {
   business_download : (text) -> (vec nat8) query;
   business_download_by : (text, nat64, nat64) -> (vec nat8) query;
   business_files : () -> (vec QueryFile) query;
+  business_hashed_find : () -> (bool) query;
+  business_hashed_update : (bool) -> ();
   business_upload : (vec UploadingArg) -> ();
   canister_status : () -> (CanisterStatusResponse);
   http_request : (CustomHttpRequest) -> (CustomHttpResponse) query;

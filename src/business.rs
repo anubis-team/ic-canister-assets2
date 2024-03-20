@@ -9,6 +9,35 @@ use crate::stable::*;
 use crate::types::*;
 
 // 查询
+#[ic_cdk::query(guard = "has_business_upload")]
+fn business_hashed_find() -> bool {
+    with_state(|s| s.business_hashed_find())
+}
+#[ic_cdk::update(guard = "has_business_upload")]
+fn business_hashed_update(hashed: bool) {
+    let _guard = call_once_guard(); // post 接口应该拦截
+
+    let old = with_state(|s| s.business_hashed_find());
+
+    if old == hashed {
+        return;
+    }
+
+    let caller = caller();
+    let arg_content = format!("set hashed: {old} -> {hashed}",); // * 记录参数内容
+
+    with_mut_state(
+        |s| {
+            s.business_hashed_update(hashed);
+            (None, ())
+        },
+        caller,
+        RecordTopics::UploadFile.topic(),
+        arg_content,
+    )
+}
+
+// 查询
 #[ic_cdk::query(guard = "has_business_query")]
 fn business_files() -> Vec<QueryFile> {
     with_state(|s| s.business_files())
@@ -21,8 +50,8 @@ fn business_download(path: String) -> Vec<u8> {
 
 // 下载数据数据
 #[ic_cdk::query(guard = "has_business_query")]
-fn business_download_by(path: String, offset: u64, offset_end: u64) -> Vec<u8> {
-    with_state(|s| s.business_download_by(path, offset, offset_end))
+fn business_download_by(path: String, offset: u64, size: u64) -> Vec<u8> {
+    with_state(|s| s.business_download_by(path, offset, size))
 }
 
 // 修改

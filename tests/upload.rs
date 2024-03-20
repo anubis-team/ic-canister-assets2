@@ -605,7 +605,7 @@ fn do_upload_file(local_files: &Vec<UploadFile>, index: usize) {
             .iter()
             .map(|file| {
                 format!(
-                    "record{{ path=\"{}\"; headers=vec{{{}}}; size={}:nat64; chunk_size={}:nat64; index={}:nat32; chunk=vec{{{}}} }}",
+                    "record{{ path=\"{}\"; headers=vec{{{}}}; hash=vec{{{}}}; size={}:nat64; chunk_size={}:nat32; index={}:nat32; chunk=vec{{{}}} }}",
                     file.file.path,
                     file.file
                         .headers
@@ -613,6 +613,7 @@ fn do_upload_file(local_files: &Vec<UploadFile>, index: usize) {
                         .map(|header| { format!("record{{\"{}\";\"{}\"}}", header.0, header.1) })
                         .collect::<Vec<String>>()
                         .join(";"),
+                    hex::decode(&file.file.hash).unwrap().iter().map(|u|format!("{}:nat8", u)).collect::<Vec<String>>().join(";"),
                     file.file.size,
                     file.chunk_size,
                     file.index,

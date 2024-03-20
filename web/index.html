@@ -297,7 +297,7 @@
             <div v-if="item.type==='file'" @click="(e) => e.stopPropagation()">
               <a :href="item.path" target="_blank"> 预览 </a>
               <div>{{' '}}</div>
-              <a v-show="item.size <= 1024 * 1024 * 3" :href="`${item.path}?attachment=`" target="_blank"> 下载 </a>
+              <a :href="`${item.path}?attachment=`" target="_blank"> 下载 </a>
             </div>
           </div>
         </div>

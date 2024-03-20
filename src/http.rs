@@ -50,9 +50,9 @@ fn inner_http_request(state: &State, req: CustomHttpRequest) -> CustomHttpRespon
         body = explore(&mut headers, state); // 主页内容
     } else {
         // 根据路径找文件
-        let file = state.business_assets_files().get(path.as_ref());
+        let file = state.business_assets_get_file(path.as_ref());
         if let Some(file) = file {
-            let asset = state.business_assets_assets().get(&file.hash);
+            let asset = state.business_assets_get(&file.hash);
             if let Some(asset) = asset {
                 let (_body, _streaming_strategy): (Vec<u8>, Option<StreamingStrategy>) = toast(
                     &path,
@@ -85,6 +85,7 @@ fn inner_http_request(state: &State, req: CustomHttpRequest) -> CustomHttpRespon
     }
 }
 
+#[inline]
 fn toast<'a>(
     path: &str,
     params: &str,
@@ -95,19 +96,19 @@ fn toast<'a>(
     headers: &mut HashMap<&'a str, Cow<'a, str>>,
 ) -> (Vec<u8>, Option<StreamingStrategy>) {
     // 1. 设置 header
-    let (offset, offset_end, streaming_strategy) = set_headers(
+    let (offset, size, streaming_strategy) = set_headers(
         path,
         params,
         request_headers,
         file,
-        asset.size as usize,
+        file.size as usize,
         code,
         headers,
     );
 
     // 2. 返回指定的内容
     (
-        (asset.data[offset..offset_end]).to_vec(),
+        (asset.slice(&file.hash, file.size, offset, size)).to_vec(),
         streaming_strategy,
     )
 }
@@ -181,8 +182,8 @@ fn set_headers<'a>(
     headers.insert("Access-Control-Max-Age", "86400".into());
 
     // Range 设置
-    let mut start: usize = 0;
-    let mut end: usize = size;
+    let mut offset: usize = 0;
+    let mut offset_end: usize = size;
     if let Some(range) = {
         let mut range = None;
         for (key, value) in request_headers.iter() {
@@ -201,13 +202,13 @@ fn set_headers<'a>(
             if let Some(s) = s {
                 let s: usize = s.parse().unwrap_or(0);
                 if s < size {
-                    start = s
+                    offset = s
                 };
             }
             if let Some(e) = e {
                 let e: usize = e.parse().unwrap_or(size - 1);
-                if start < e && e < size {
-                    end = e + 1
+                if offset < e && e < size {
+                    offset_end = e + 1
                 };
             }
         }
@@ -219,12 +220,12 @@ fn set_headers<'a>(
     }
     // ic_cdk::println!("---------- {} {} ----------", start, end);
     // 如果过长, 需要阶段显示
-    let mut streaming_end = end;
+    let mut streaming_end = offset_end;
     let mut streaming_strategy: Option<StreamingStrategy> = None;
-    let range = streaming_end - start;
-    if MAX_RESPONSE_LENGTH < range && start + MAX_RESPONSE_LENGTH < end {
+    let range = streaming_end - offset;
+    if MAX_RESPONSE_LENGTH < range {
         // 响应的范围太大了, 缩短为最大长度, 此时应当开启流式响应
-        streaming_end = start + MAX_RESPONSE_LENGTH;
+        streaming_end = offset + MAX_RESPONSE_LENGTH;
         streaming_strategy = Some(StreamingStrategy::Callback {
             callback: HttpRequestStreamingCallback::new(ic_cdk::id(), "http_streaming".to_string()),
             token: StreamingCallbackToken {
@@ -232,7 +233,7 @@ fn set_headers<'a>(
                 params: params.to_string(),
                 headers: request_headers.clone(),
                 start: streaming_end as u64,
-                end: end as u64,
+                end: offset_end as u64,
             },
         });
         headers.insert("Transfer-Encoding", "chunked".into());
@@ -241,18 +242,18 @@ fn set_headers<'a>(
     // Content-Range: bytes 0-499/10000
     headers.insert(
         "Content-Range",
-        format!("bytes {}-{}/{}", start, end - 1, size).into(), // 流式响应也要设置正确的内容范围
+        format!("bytes {}-{}/{}", offset, offset_end - 1, size).into(), // 流式响应也要设置正确的内容范围
     );
     // ! 长度设置了会出错
     // headers.insert("Content-Length", format!("{}", end - start).into()); // ? 这个应该是本次返回的长度
 
     // 如果是视频可能需要返回其他的
     *code = 200;
-    if end < size {
+    if offset_end < size {
         *code = 206; // 还有内容没给
     }
 
-    (start, streaming_end, streaming_strategy)
+    (offset, streaming_end - offset, streaming_strategy)
 }
 
 // 找不到对应的文件
@@ -291,27 +292,29 @@ fn http_streaming(
         };
     }
     crate::stable::with_state(|state| {
-        let file = state.business_assets_files().get(&path);
+        let file = state.business_assets_get_file(&path);
         if let Some(file) = file {
-            let asset = state.business_assets_assets().get(&file.hash);
+            let asset = state.business_assets_get(&file.hash);
             if let Some(asset) = asset {
                 // 如果过长, 需要阶段显示
-                let start = start as usize;
-                let end = end as usize;
-                let mut streaming_end = end;
-                let range = streaming_end - start;
-                if MAX_RESPONSE_LENGTH < range && start + MAX_RESPONSE_LENGTH < end {
+                let offset = start as usize;
+                let offset_end = end as usize;
+                let mut streaming_end = offset_end;
+                let range = streaming_end - offset;
+                if MAX_RESPONSE_LENGTH < range {
                     // 响应的范围太大了, 缩短为最大长度, 此时应当继续流式响应
-                    streaming_end = start + MAX_RESPONSE_LENGTH;
+                    streaming_end = offset + MAX_RESPONSE_LENGTH;
                 }
                 return StreamingCallbackHttpResponse {
-                    body: (asset.data[start..streaming_end]).to_vec(),
+                    body: asset
+                        .slice(&file.hash, file.size, offset, streaming_end - offset)
+                        .to_vec(),
                     token: Some(StreamingCallbackToken {
                         path: path.to_string(),
                         params: params.to_string(),
                         headers: headers.clone(),
                         start: streaming_end as u64, // 继续
-                        end: end as u64,
+                        end,
                     }),
                 };
             }
