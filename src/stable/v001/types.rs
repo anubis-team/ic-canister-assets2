@@ -112,7 +112,7 @@ mod assets {
     }
 
     impl AssetData {
-        pub fn from(data: Vec<u8>) -> Self {
+        pub fn from(_hash: &HashDigest, data: Vec<u8>) -> Self {
             Self { data }
         }
         pub fn slice(
@@ -238,7 +238,7 @@ impl InnerState {
             .business
             .assets
             .entry(hash)
-            .or_insert_with(|| AssetData::from(file.data));
+            .or_insert_with(|| AssetData::from(&hash, file.data));
 
         self.put_file(file.path, file.headers, hash, file.size); // 存完毕 assets 数据了，然后要对文件建立代理索引
     }
