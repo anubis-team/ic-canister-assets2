@@ -60,7 +60,7 @@ fn pause_query_reason() -> Option<PauseReason> {
 fn pause_replace(reason: Option<String>) {
     let old = with_state(|s| s.pause_query().clone());
 
-    if matches!(old, None) && matches!(reason, None) {
+    if old.is_none() && reason.is_none() {
         return; // 未改变内容
     }
 
