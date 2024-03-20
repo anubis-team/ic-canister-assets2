@@ -226,10 +226,7 @@ fn set_headers<'a>(
         // 响应的范围太大了, 缩短为最大长度, 此时应当开启流式响应
         streaming_end = start + MAX_RESPONSE_LENGTH;
         streaming_strategy = Some(StreamingStrategy::Callback {
-            callback: HttpRequestStreamingCallback::new(
-                ic_cdk::id(),
-                "http_request_streaming_callback".to_string(),
-            ),
+            callback: HttpRequestStreamingCallback::new(ic_cdk::id(), "http_streaming".to_string()),
             token: StreamingCallbackToken {
                 path: path.to_string(),
                 params: params.to_string(),
@@ -279,7 +276,7 @@ fn http_streaming(
     }: StreamingCallbackToken,
 ) -> StreamingCallbackHttpResponse {
     // ic_cdk::println!(
-    //     "http_request_streaming_callback: {:?} {:?} {:?} {:?} {:?}",
+    //     "http_streaming: {:?} {:?} {:?} {:?} {:?}",
     //     path,
     //     params,
     //     headers,
