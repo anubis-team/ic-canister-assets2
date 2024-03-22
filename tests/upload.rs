@@ -295,10 +295,10 @@ fn get_headers(file: &str) -> Vec<(String, String)> {
     }
 
     // 缓存时间
-    headers.push((
-        "Cache-Control".to_string(),
-        "public, max-age=31536000".to_string(),
-    ));
+    // headers.push((
+    //     "Cache-Control".to_string(),
+    //     "public, max-age=31536000".to_string(),
+    // ));
 
     // gzip
     if file.ends_with(".gz") {
