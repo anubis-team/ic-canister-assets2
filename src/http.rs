@@ -174,35 +174,41 @@ fn set_headers<'a>(
     // headers.insert("Cache-Control", "private".into());
 
     // Range 设置
-    let mut offset: usize = 0; // ! 起始位置 包含
-    let mut offset_end: usize = size; // ! 末尾位置 不包含
-    let mut ranged = false; // 是否 range 请求
-                            // if let Some(range) = request_headers
-                            //     .iter()
-                            //     .find(|(key, _)| &key.to_lowercase() == "range")
-                            //     .map(|(_, v)| v.trim())
-                            // {
-                            //     ic_cdk::println!("range: {range}");
-                            //     // https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Headers/Range
-                            //     // bytes=start-end
-                            //     if let Some(range) = range.strip_prefix("bytes=") {
-                            //         let mut ranges = range.split(',').next().unwrap_or_default().split('-');
-                            //         let s = ranges.next().map(|s| s.parse().unwrap_or(0)).unwrap_or(0);
-                            //         let e = ranges
-                            //             .next()
-                            //             .map(|s| s.parse().unwrap_or(size - 1))
-                            //             .unwrap_or(size - 1);
-                            //         ranged = true;
-                            //         if s < size {
-                            //             offset = s; // ! 起始位置 包含
-                            //         }
-                            //         if offset < e && e < size {
-                            //             offset_end = e + 1; // ! 末尾位置 不包含
-                            //         }
-                            //         ic_cdk::println!("s: {s}");
-                            //         ic_cdk::println!("e: {e}");
-                            //     }
-                            // }
+    let mut ranged: bool = false; // 是否 range 请求
+
+    // let mut offset: usize = 0; // ! 起始位置 包含 // ? chrome 支持 safari 不支持
+    let offset: usize = 0; // ! 起始位置 包含 // ? chrome 支持 safari 不支持
+
+    // let mut offset_end: usize = size; // ! 末尾位置 不包含 // ? chrome 不支持 safari 不支持
+    let offset_end: usize = size; // ! 末尾位置 不包含 // ? chrome 不支持 safari 不支持
+
+    if let Some(range) = request_headers
+        .iter()
+        .find(|(key, _)| &key.to_lowercase() == "range")
+        .map(|(_, v)| v.trim())
+    {
+        // https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Headers/Range
+        // bytes=start-end
+        if let Some(_range) = range.strip_prefix("bytes=") {
+            ranged = true;
+
+            // ? chrome 支持 safari 不支持
+            // let mut ranges = range.split(',').next().unwrap_or_default().split('-');
+            // let s = ranges.next().map(|s| s.parse().unwrap_or(0)).unwrap_or(0);
+            // if s < size {
+            //     offset = s; // ! 起始位置 包含
+            // }
+
+            // ? chrome 不支持 safari 不支持
+            // let e = ranges
+            //     .next()
+            //     .map(|s| s.parse().unwrap_or(size - 1))
+            //     .unwrap_or(size - 1);
+            // if offset < e && e < size {
+            //     offset_end = e + 1; // ! 末尾位置 不包含
+            // }
+        }
+    }
 
     // 独立的请求头内容
     for (name, value) in file.headers.iter() {
@@ -218,8 +224,8 @@ fn set_headers<'a>(
         streaming_end = offset + MAX_RESPONSE_LENGTH; // ! 末尾位置 不包含
         streaming_strategy = Some(new_streaming_strategy(
             path.to_string(),
-            streaming_end,
-            offset_end,
+            streaming_end as u64,
+            offset_end as u64,
         ));
     }
 
@@ -256,20 +262,24 @@ fn not_found<'a>(code: &mut u16, headers: &mut HashMap<&'a str, Cow<'a, str>>) -
 }
 
 #[inline]
-fn new_token(offset: usize, offset_end: usize) -> HashMap<String, String> {
+fn new_token(offset: u64, offset_end: u64) -> HashMap<String, String> {
     let mut token = HashMap::new();
     token.insert("start".into(), offset.to_string()); // ! 新的位置 包含
     token.insert("end".into(), offset_end.to_string()); // ! 末尾位置 不包含
     token
 }
 #[inline]
-fn new_streaming_strategy(path: String, offset: usize, offset_end: usize) -> StreamingStrategy {
+fn new_streaming_token(path: String, offset: u64, offset_end: u64) -> StreamingCallbackToken {
+    StreamingCallbackToken {
+        path,
+        token: new_token(offset, offset_end),
+    }
+}
+#[inline]
+fn new_streaming_strategy(path: String, offset: u64, offset_end: u64) -> StreamingStrategy {
     StreamingStrategy::Callback {
         callback: HttpRequestStreamingCallback::new(ic_cdk::id(), "http_streaming".into()),
-        token: StreamingCallbackToken {
-            path,
-            token: new_token(offset, offset_end),
-        },
+        token: new_streaming_token(path, offset, offset_end),
     }
 }
 
@@ -317,10 +327,8 @@ fn http_streaming(
                     body: asset
                         .slice(&file.hash, file.size, offset, streaming_end - offset)
                         .to_vec(),
-                    token: ((streaming_end as u64) < end).then(|| StreamingCallbackToken {
-                        path: path.to_string(),
-                        token: new_token(streaming_end, end as usize),
-                    }),
+                    token: ((streaming_end as u64) < end)
+                        .then(|| new_streaming_token(path, streaming_end as u64, end)),
                 };
             }
         }
