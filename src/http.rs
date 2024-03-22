@@ -222,7 +222,7 @@ fn set_headers<'a>(
     if offset + MAX_RESPONSE_LENGTH < streaming_end {
         // 响应的范围太大了, 缩短为最大长度, 此时应当开启流式响应
         streaming_end = offset + MAX_RESPONSE_LENGTH; // ! 末尾位置 不包含
-        streaming_strategy = Some(new_streaming_strategy(
+        streaming_strategy = Some(to_streaming_strategy(
             path.to_string(),
             streaming_end as u64,
             offset_end as u64,
@@ -262,32 +262,40 @@ fn not_found<'a>(code: &mut u16, headers: &mut HashMap<&'a str, Cow<'a, str>>) -
 }
 
 #[inline]
-fn new_token(offset: u64, offset_end: u64) -> HashMap<String, String> {
-    let mut token = HashMap::new();
-    token.insert("start".into(), offset.to_string()); // ! 新的位置 包含
-    token.insert("end".into(), offset_end.to_string()); // ! 末尾位置 不包含
-    token
-}
-#[inline]
-fn new_streaming_token(path: String, offset: u64, offset_end: u64) -> StreamingCallbackToken {
-    StreamingCallbackToken {
-        path,
-        token: new_token(offset, offset_end),
+fn to_streaming_strategy(path: String, offset: u64, offset_end: u64) -> StreamingStrategy {
+    StreamingStrategy::Callback {
+        callback: HttpRequestStreamingCallback::new(ic_cdk::id(), "http_streaming".into()),
+        token: to_streaming_token(path, offset, offset_end),
     }
 }
 #[inline]
-fn new_streaming_strategy(path: String, offset: u64, offset_end: u64) -> StreamingStrategy {
-    StreamingStrategy::Callback {
-        callback: HttpRequestStreamingCallback::new(ic_cdk::id(), "http_streaming".into()),
-        token: new_streaming_token(path, offset, offset_end),
+fn to_streaming_token(path: String, offset: u64, offset_end: u64) -> StreamingCallbackToken {
+    StreamingCallbackToken {
+        path,
+        token: {
+            let mut token = HashMap::new();
+            token.insert("start".into(), offset.to_string()); // ! 新的位置 包含
+            token.insert("end".into(), offset_end.to_string()); // ! 末尾位置 不包含
+            token
+        },
+    }
+}
+#[inline]
+fn from_streaming_token(
+    StreamingCallbackToken { path, token }: StreamingCallbackToken,
+) -> Result<(String, u64, u64), ()> {
+    match (
+        token.get("start").map(|s| s.parse()),
+        token.get("end").map(|e| e.parse()),
+    ) {
+        (Some(Ok(start)), Some(Ok(end))) => Ok((path, start, end)),
+        _ => Err(()),
     }
 }
 
 // 流式响应回调
 #[ic_cdk::query]
-fn http_streaming(
-    StreamingCallbackToken { path, token }: StreamingCallbackToken,
-) -> StreamingCallbackHttpResponse {
+fn http_streaming(token: StreamingCallbackToken) -> StreamingCallbackHttpResponse {
     // ic_cdk::println!(
     //     "http_streaming: {:?} {:?} {:?} {:?} {:?}",
     //     path,
@@ -296,11 +304,8 @@ fn http_streaming(
     //     start,
     //     end,
     // );
-    let (start, end): (u64, u64) = match (
-        token.get("start").map(|s| s.parse()),
-        token.get("end").map(|e| e.parse()),
-    ) {
-        (Some(Ok(start)), Some(Ok(end))) => (start, end),
+    let (path, start, end) = match from_streaming_token(token) {
+        Ok((path, start, end)) => (path, start, end),
         _ => return StreamingCallbackHttpResponse::empty(),
     };
     if start == end {
@@ -328,7 +333,7 @@ fn http_streaming(
                         .slice(&file.hash, file.size, offset, streaming_end - offset)
                         .to_vec(),
                     token: ((streaming_end as u64) < end)
-                        .then(|| new_streaming_token(path, streaming_end as u64, end)),
+                        .then(|| to_streaming_token(path, streaming_end as u64, end)),
                 };
             }
         }
