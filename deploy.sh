@@ -10,6 +10,7 @@ cargo clippy
 # dfx canister --network ic call ic-canister-assets pause_replace "(null)"
 # dfx canister --network ic call ic-canister-assets business_hashed_update "(true)"
 
+# dfx deploy --network local ic-canister-assets --mode=reinstall --yes
 dfx canister --network local call ic-canister-assets pause_replace "(opt \"for updating\")"
 dfx deploy --network local ic-canister-assets
 dfx canister --network local call ic-canister-assets pause_replace "(null)"
