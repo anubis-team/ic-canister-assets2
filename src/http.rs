@@ -182,6 +182,7 @@ fn set_headers<'a>(
                             //     .find(|(key, _)| &key.to_lowercase() == "range")
                             //     .map(|(_, v)| v.trim())
                             // {
+                            //     ic_cdk::println!("range: {range}");
                             //     // https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Headers/Range
                             //     // bytes=start-end
                             //     if let Some(range) = range.strip_prefix("bytes=") {
@@ -198,6 +199,8 @@ fn set_headers<'a>(
                             //         if offset < e && e < size {
                             //             offset_end = e + 1; // ! 末尾位置 不包含
                             //         }
+                            //         ic_cdk::println!("s: {s}");
+                            //         ic_cdk::println!("e: {e}");
                             //     }
                             // }
 
