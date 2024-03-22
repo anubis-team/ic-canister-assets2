@@ -253,6 +253,7 @@ fn set_headers<'a>(
 }
 
 // 找不到对应的文件
+#[inline]
 fn not_found<'a>(code: &mut u16, headers: &mut HashMap<&'a str, Cow<'a, str>>) -> Vec<u8> {
     *code = 404;
 
