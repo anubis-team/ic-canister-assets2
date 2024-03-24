@@ -8,6 +8,8 @@ pub use std::collections::{HashMap, HashSet};
 #[allow(unused)]
 pub use std::fmt::Display;
 
+#[allow(clippy::panic)] // ? SAFETY
+#[allow(unused_variables)]
 pub trait Business:
     Pausable<PauseReason>
     + ParsePermission
@@ -18,19 +20,40 @@ pub trait Business:
     + StableHeap
 {
     // 对外的查询接口
-    fn business_hashed_find(&self) -> bool;
-    fn business_files(&self) -> Vec<QueryFile>;
-    fn business_download(&self, path: String) -> Vec<u8>;
-    fn business_download_by(&self, path: String, offset: u64, size: u64) -> Vec<u8>;
+    fn business_hashed_find(&self) -> bool {
+        panic!("Not supported operation by this version.")
+    }
+    fn business_files(&self) -> Vec<crate::stable::QueryFile> {
+        panic!("Not supported operation by this version.")
+    }
+    fn business_download(&self, path: String) -> Vec<u8> {
+        panic!("Not supported operation by this version.")
+    }
+    fn business_download_by(&self, path: String, offset: u64, size: u64) -> Vec<u8> {
+        panic!("Not supported operation by this version.")
+    }
 
     // 对外的修改接口
-    fn business_hashed_update(&mut self, hashed: bool);
-    fn business_upload(&mut self, args: Vec<UploadingArg>);
-    fn business_delete(&mut self, names: Vec<String>);
+    fn business_hashed_update(&mut self, hashed: bool) {
+        panic!("Not supported operation by this version.")
+    }
+    fn business_upload(&mut self, args: Vec<crate::stable::UploadingArg>) {
+        panic!("Not supported operation by this version.")
+    }
+    fn business_delete(&mut self, names: Vec<String>) {
+        panic!("Not supported operation by this version.")
+    }
 
     // 内部使用的接口
-    fn business_assets_get_file(&self, path: &str) -> Option<&AssetFile>;
-    fn business_assets_get(&self, hash: &HashDigest) -> Option<&AssetData>;
+    fn business_assets_get_file(&self, path: &str) -> Option<&crate::stable::AssetFile> {
+        panic!("Not supported operation by this version.")
+    }
+    fn business_assets_get(
+        &self,
+        hash: &crate::stable::HashDigest,
+    ) -> Option<&crate::stable::AssetData> {
+        panic!("Not supported operation by this version.")
+    }
 }
 
 // 业务实现

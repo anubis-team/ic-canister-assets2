@@ -4,7 +4,7 @@ use super::types::*;
 #[allow(unused_variables)]
 impl Business for InnerState {
     fn business_hashed_find(&self) -> bool {
-        self.heap_state.business.hashed
+        self.hashed
     }
     fn business_files(&self) -> Vec<QueryFile> {
         self.files()
@@ -17,7 +17,7 @@ impl Business for InnerState {
     }
 
     fn business_hashed_update(&mut self, hashed: bool) {
-        self.heap_state.business.hashed = hashed;
+        self.hashed = hashed;
     }
     fn business_upload(&mut self, args: Vec<UploadingArg>) {
         for arg in args {
@@ -32,9 +32,9 @@ impl Business for InnerState {
     }
 
     fn business_assets_get_file(&self, path: &str) -> Option<&AssetFile> {
-        self.heap_state.business.files.get(path)
+        self.files.get(path)
     }
     fn business_assets_get(&self, hash: &HashDigest) -> Option<&AssetData> {
-        self.heap_state.business.assets.get(hash)
+        self.assets.get(hash)
     }
 }
