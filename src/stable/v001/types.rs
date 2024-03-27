@@ -236,6 +236,8 @@ impl InnerState {
         }
     }
     fn put_assets(&mut self, file: UploadingFile) {
+        // 0. 先清空同路径的文件
+        self.clean_file(&file.path);
         // 1. 计算 hash
         let hash = if self.hashed {
             file.hash // hashed true 直接使用
@@ -250,14 +252,12 @@ impl InnerState {
         self.put_file(file.path, file.headers, hash, file.size); // 存完毕 assets 数据了，然后要对文件建立代理索引
     }
     pub fn clean_file(&mut self, path: &String) {
-        // 1. 找到文件
-        let file = match self.files.get(path) {
+        // 1. 删除文件
+        let file = match self.files.remove(path) {
             Some(file) => file.clone(),
             None => return,
         };
-        // 2. 清除 file
-        self.files.remove(path);
-        // 3. 清除 hashes
+        // 2. 清除 hashes
         if let Some(HashedPath(path_set)) = self.hashes.get_mut(&file.hash) {
             path_set.remove(&file.path);
             if path_set.is_empty() {
